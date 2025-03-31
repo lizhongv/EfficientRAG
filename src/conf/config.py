@@ -1,6 +1,8 @@
 import os
 from os.path import sep
 
+os.chdir("/data0/lizhong/multi_hop_rag/EfficientRAG")
+
 DATA_BASE_PATH = "data"
 DATASET_PATH = os.path.join(DATA_BASE_PATH, "dataset")
 

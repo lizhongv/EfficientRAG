@@ -1,6 +1,7 @@
 import os
 import json
 import csv
+from tqdm import tqdm
 
 
 def load_passages(fpath):
@@ -10,12 +11,12 @@ def load_passages(fpath):
     passages = []
     with open(fpath) as fin:
         if fpath.endswith(".jsonl"):
-            for k, line in enumerate(fin):
+            for line in tqdm(fin, desc='Load corpus'):
                 ex = json.loads(line)
                 passages.append(ex)
         else:
             reader = csv.reader(fin, delimiter="\t")
-            for k, row in enumerate(reader):
+            for row in tqdm(reader):
                 if not row[0] == "id":
                     ex = {"id": row[0], "title": row[2], "text": row[1]}
                     passages.append(ex)

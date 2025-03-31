@@ -3,10 +3,10 @@ import os
 import pickle
 import sys
 
-from embeddings import Embedder, ModelTypes
-
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from retrievers.utils.utils import load_passages
+from embeddings import Embedder, ModelTypes
 
 
 def parse_args():
@@ -40,10 +40,12 @@ def main(opts):
     output_dir = opts.output_dir
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
+
     for idx, (ids, embeddings) in embedder.embed_passages(data):
         output_file = os.path.join(output_dir, f"passages_{idx:02d}")
         with open(output_file, "wb") as f:
             pickle.dump((ids, embeddings), f)
+
         print(f"Save {len(ids)} embeddings to {output_file}")
 
 

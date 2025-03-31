@@ -108,11 +108,16 @@ class HotpotQADataset(MultiHopDataset):
         super().__init__(data_path)
 
     def get_supporting_facts(self, sample: dict) -> list[ChunkInfo]:
-        titles = list(set(sample["supporting_facts"]["title"]))
+        # titles = list(set(sample["supporting_facts"]["title"]))
+        supporting_titles = list(set(l[0] for l in sample['supporting_facts']))
+        titles = [l[0] for l in sample["context"]]
+        sentences_list = [l[1] for l in sample['context']]
         supporting_facts = []
-        for title in titles:
-            idx = sample["context"]["title"].index(title)
-            sentences = sample["context"]["sentences"][idx]
+        for title in supporting_titles:
+            # idx = sample["context"]["title"].index(title)
+            # sentences = sample["context"]["sentences"][idx]
+            idx = titles.index(title)
+            sentences = sentences_list[idx]
             chunk = self.process_chunk(title, sentences)
             info = ChunkInfo(idx, title, chunk)
             supporting_facts.append(info)
@@ -120,9 +125,11 @@ class HotpotQADataset(MultiHopDataset):
 
     def get_chunks(self, sample: dict) -> list[ChunkInfo]:
         chunks = []
-        for idx, (title, context) in enumerate(
-            zip(sample["context"]["title"], sample["context"]["sentences"])
-        ):
+        # for idx, (title, context) in enumerate(
+        #     zip(sample["context"]["title"], sample["context"]["sentences"])
+        # ):
+        for idx, d in enumerate(sample['context']):
+            title, context = d[0], d[1]
             chunk = self.process_chunk(title, context)
             info = ChunkInfo(idx, title, chunk)
             chunks.append(info)
@@ -136,6 +143,9 @@ class HotpotQADataset(MultiHopDataset):
 
     def get_hop(self, sample: dict) -> str:
         return 2
+    
+    def get_id(self, sample: dict) -> str:
+        return sample["_id"]
 
 
 class WikiMQADataset(MultiHopDataset):
@@ -197,7 +207,8 @@ class MuSiQueDataset(MultiHopDataset):
 
     def get_supporting_facts(self, sample: dict) -> list[ChunkInfo]:
         chunks = self.get_chunks(sample)
-        is_supports = sample["paragraphs"]["is_supporting"]
+        # is_supports = sample["paragraphs"]["is_supporting"]
+        is_supports = [d['is_supporting'] for d in sample['paragraphs']]
         supporting_facts = []
         for is_support, chunk in zip(is_supports, chunks):
             if is_support:
@@ -206,11 +217,13 @@ class MuSiQueDataset(MultiHopDataset):
 
     def get_chunks(self, sample: dict) -> list[ChunkInfo]:
         chunks = []
-        for idx, title, chunk in zip(
-            sample["paragraphs"]["idx"],
-            sample["paragraphs"]["title"],
-            sample["paragraphs"]["paragraph_text"],
-        ):
+        # for idx, title, chunk in zip(
+        #     sample["paragraphs"]["idx"],
+        #     sample["paragraphs"]["title"],
+        #     sample["paragraphs"]["paragraph_text"],
+        # ):
+        for d in sample['paragraphs']:
+            idx, title, chunk = d['idx'], d['title'], d['paragraph_text']
             chunk = self.process_chunk(title, chunk)
             info = ChunkInfo(idx, title, chunk)
             chunks.append(info)

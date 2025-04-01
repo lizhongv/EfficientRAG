@@ -30,6 +30,8 @@ python src/efficient_rag/labeler_training.py \
     --dataset hotpotQA \
     --tags 2
 
+
+tensorboard --logdir=saved_models/filter/filter_20250401_043856/log --host 0.0.0.0 --port 31827
 ```
 
 ## 数据合成

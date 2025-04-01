@@ -17,3 +17,5 @@ deepspeed>=0.14.1
 vllm
 ray[serve]
 black
+tensorboard 
+tensorboardX

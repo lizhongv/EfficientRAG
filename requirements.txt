@@ -4,7 +4,7 @@ numpy
 openai>1.0.0
 Requests
 tqdm
-transformers>=4.40
+transformers==4.46
 rich
 tenacity
 spacy

@@ -1,27 +1,28 @@
+# import wandb
 import argparse
 import os
 import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from datetime import datetime
-
 import torch
 import torch.nn as nn
-import wandb
+
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.nn import DataParallel
 from transformers import DebertaV2Tokenizer, EvalPrediction, Trainer, TrainingArguments
 
-from conf import (
-    EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH,
-    MODEL_PATH,
-    TAG_MAPPING,
-    TAG_MAPPING_TWO,
-    TERMINATE_ID,
-)
-from efficient_rag.data import LabelerDataset
-from efficient_rag.model import DebertaForSequenceTokenClassification
-from utils import load_jsonl
+if True:
+    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+    os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from conf import (
+        EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH,
+        MODEL_PATH,
+        TAG_MAPPING,
+        TAG_MAPPING_TWO,
+        TERMINATE_ID,
+    )
+    from efficient_rag.data import LabelerDataset
+    from efficient_rag.model import DebertaForSequenceTokenClassification
+    from utils import load_jsonl
 
 
 class LabelerTrainer(Trainer):
@@ -38,7 +39,7 @@ class LabelerTrainer(Trainer):
         token_logits = outputs.token_logits
         sequence_logits = outputs.sequence_logits
 
-        weight = torch.tensor(WEIGHT_AVERAGE).cuda() # noqa
+        weight = torch.tensor(WEIGHT_AVERAGE).cuda()  # noqa
         loss_fct = nn.CrossEntropyLoss(weight=weight)
         selected_sequence_logits = sequence_logits.argmax(-1)
 
@@ -58,7 +59,7 @@ class LabelerTrainer(Trainer):
             sequence_logits.view(-1, module.sequence_labels),
             sequence_labels.view(-1),
         )
-        wandb.log({"token_loss": token_loss, "sequence_loss": sequence_loss})
+        # wandb.log({"token_loss": token_loss, "sequence_loss": sequence_loss})
         loss = token_loss + sequence_loss
         return (loss, outputs) if return_outputs else loss
 
@@ -111,6 +112,7 @@ def parse_args():
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--test_samples", type=int, default=100)
     parser.add_argument("--weight_average", action="store_true")
+    parser.add_argument("--model_name_or_path", type=str, default="microsoft/deberta-v3-large", help="Path to load model")
     args = parser.parse_args()
     return args
 
@@ -149,6 +151,8 @@ def build_dataset(
 def main(opt: argparse.Namespace):
     global tokenizer
     global CHUNK_TAG_MAPPING
+
+    # wandb
     if opt.tags == 2:
         WANDB_PROJ_NAME = "EfficientRAG_labeler_two"
         CHUNK_TAG_MAPPING = TAG_MAPPING_TWO
@@ -168,10 +172,11 @@ def main(opt: argparse.Namespace):
     else:
         WEIGHT_AVERAGE = [1.0, 1.0]
 
-
-    tokenizer = DebertaV2Tokenizer.from_pretrained(MODEL_PATH)
+    tokenizer = DebertaV2Tokenizer.from_pretrained(opt.model_name_or_path)
     model = DebertaForSequenceTokenClassification.from_pretrained(
-        MODEL_PATH, sequence_labels=opt.tags, token_labels=2
+        opt.model_name_or_path,
+        sequence_labels=opt.tags,
+        token_labels=2
     )
     save_path_mapping = {
         2: "saved_models/labeler_two",
@@ -206,28 +211,34 @@ def main(opt: argparse.Namespace):
         weight_decay=0.01,
         logging_dir=os.path.join(save_dir, "log"),
         save_strategy="epoch" if not opt.test else "no",
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         eval_steps=opt.eval_steps,
-        report_to="wandb",
+        # report_to="wandb",
+        report_to="tensorboard",
         run_name=run_name,
         logging_steps=opt.logging_steps,
         warmup_steps=opt.warmup_steps,
         save_only_model=True,
         include_inputs_for_metrics=True,
     )
+
+    from transformers import DataCollatorWithPadding  # 假设你使用这个作为处理类示例
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     trainer = LabelerTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
-        tokenizer=tokenizer,
+        # tokenizer=tokenizer,
+        data_collator=data_collator,
         compute_metrics=eval_labeler,
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=True)
+    print("Done.")
 
 
 if __name__ == "__main__":
     options = parse_args()
-    if options.test:
-        os.environ["WANDB_MODE"] = "dryrun"
+    # if options.test:
+    #     os.environ["WANDB_MODE"] = "dryrun"
     main(options)

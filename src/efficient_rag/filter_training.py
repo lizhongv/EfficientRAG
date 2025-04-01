@@ -77,6 +77,7 @@ def main(opt: argparse.Namespace):
     model.to('cuda')
 
     save_dir = os.path.join(opt.save_path, f"filter_{datetime.now().strftime(r'%Y%m%d_%H%M%S')}")
+    save_dir = "/data0/lizhong/multi_hop_rag/EfficientRAG/saved_models/filter/filter_20250401_043856"
     run_name = f"{opt.dataset}-{datetime.now().strftime(r'%m%d%H%M')}"
 
     train_dataset = build_dataset(opt.dataset, "train", opt.max_length, tokenizer, test_mode=opt.test)
@@ -91,7 +92,6 @@ def main(opt: argparse.Namespace):
         weight_decay=0.01,
         logging_dir=os.path.join(save_dir, "log"),
         save_strategy="epoch",
-        # evaluation_strategy="steps",
         eval_strategy="steps",
         eval_steps=opt.eval_steps,
         # report_to="wandb",
@@ -115,7 +115,8 @@ def main(opt: argparse.Namespace):
         data_collator=data_collator,  # 使用处理类
         compute_metrics=eval_filter,
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=True)
+    print("Done.")
 
 
 if __name__ == "__main__":

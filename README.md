@@ -39,10 +39,10 @@ python src/efficient_rag/filter_training.py \
     --model_name_or_path ../deberta-v3-large \   
 
 # 5. Training Labeler mode
-python src/efficient_rag/labeler_training.py \
+nohup python -u src/efficient_rag/labeler_training.py \
     --dataset hotpotQA \
     --tags 2 \
-    --model_name_or_path ../deberta-v3-large
+    --model_name_or_path ../deberta-v3-large &
 
 # tensorboard --logdir=saved_models/filter/filter_20250401_043856/log --host 0.0.0.0 --port 31827
 

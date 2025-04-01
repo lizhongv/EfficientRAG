@@ -1,6 +1,20 @@
 ```bash
 # 1. env
-        
+export https_proxy=http://agent.baidu.com:8891
+git clone https://github.com/lizhongv/EfficientRAG.git
+cd EfficientRAG
+
+pip install uv
+uv venv effrag --python 3.10 && source effrag/bin/activate && uv pip install --upgrade pip
+pip install -r requirements.txt
+
+# 2. download model
+# huggingface-cli download --resume-download facebook/contriever-msmarco --local-dir contriever-msmarco --local-dir-use-symlinks False
+# huggingface-cli download --resume-download microsoft/deberta-v3-large --local-dir deberta-v3-large --local-dir-use-symlinks False
+
+modelscope download --model zl2272001/deberta-v3-large  --local_dir ../deberta-v3-large
+modelscope download --model zl2272001/contriever-msmarco  --local_dir ../contriever-msmarco
+
 # 1. Unify the data format
 # python src/retrievers/data_processing.py
 

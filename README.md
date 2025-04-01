@@ -1,22 +1,20 @@
-```bash        
-# 统一数据集格式
-python src/retrievers/data_processing.py
+```bash
+# 1. env
+        
+# 1. Unify the data format
+# python src/retrievers/data_processing.py
 
-# Prepare the corpus by extract documents 
-python src/retrievers/multihop_data_extrator.py --dataset hotpotQA
-python src/retrievers/multihop_data_extrator.py --dataset 2WikiMQA
-python src/retrievers/multihop_data_extrator.py --dataset musique
+# 2. Prepare the corpus by extract documents 
+# python src/retrievers/multihop_data_extrator.py --dataset hotpotQA
+# python src/retrievers/multihop_data_extrator.py --dataset 2WikiMQA
+# python src/retrievers/multihop_data_extrator.py --dataset musique
 
-tar -zcvf data.tar.gz data
-tar -zxvf data.tar.gz
+# 3. Load all the processed data from the ModelScope community. 
+modelscope download --dataset zl2272001/EfficientRAG  --local_dir ./
+# tar -zcvf data.tar.gz data # 压缩
+tar -zxvf data.tar.gz # 解压
 
-#  Construct embedding
-python src/retrievers/passage_embedder.py \
-    --passages data/corpus/hotpotQA/corpus.jsonl \
-    --output_dir data/corpus/hotpotQA/contriever \
-    --model_type contriever \
-    --model_name_or_path /data1/Public/LLMs/contriever \
-
+# 
 
 # Training Filter model
 python src/efficient_rag/filter_training.py \
@@ -29,6 +27,14 @@ python src/efficient_rag/filter_training.py \
 python src/efficient_rag/labeler_training.py \
     --dataset hotpotQA \
     --tags 2
+
+
+#  Construct embedding
+python src/retrievers/passage_embedder.py \
+    --passages data/corpus/hotpotQA/corpus.jsonl \
+    --output_dir data/corpus/hotpotQA/contriever \
+    --model_type contriever \
+    --model_name_or_path /data1/Public/LLMs/contriever \
 
 ```
 

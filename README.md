@@ -7,6 +7,7 @@ cd EfficientRAG
 pip install uv
 uv venv effrag --python 3.10 && source effrag/bin/activate && uv pip install --upgrade pip
 pip install -r requirements.txt
+python -m spacy download en_core_web_sm
 
 # 2. download model
 # pip install huggingface_hub

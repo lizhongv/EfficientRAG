@@ -35,12 +35,13 @@ tar -zxvf data.tar.gz # 解压
 python src/efficient_rag/filter_training.py \
     --dataset hotpotQA \
     --save_path saved_models/filter \
-    --model_name_or_path /data1/Public/LLMs/deberta-v3-large \   
+    --model_name_or_path ../deberta-v3-large \   
 
 # 5. Training Labeler mode
 python src/efficient_rag/labeler_training.py \
     --dataset hotpotQA \
-    --tags 2
+    --tags 2 \
+    --model_name_or_path ../deberta-v3-large
 
 # tensorboard --logdir=saved_models/filter/filter_20250401_043856/log --host 0.0.0.0 --port 31827
 
@@ -49,8 +50,7 @@ python src/retrievers/passage_embedder.py \
     --passages data/corpus/hotpotQA/corpus.jsonl \
     --output_dir data/corpus/hotpotQA/contriever \
     --model_type contriever \
-    --model_name_or_path /data1/Public/LLMs/contriever \
-
+    --model_name_or_path ../contriever-msmarco \
 ```
 
 ## 数据合成

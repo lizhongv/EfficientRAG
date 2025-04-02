@@ -63,7 +63,11 @@ def parse_args():
 
 def build_dataset(dataset: str, split: str, max_len: int = 128, tokenizer=None, test_mode=False):
     data_path = os.path.join(EFFICIENT_RAG_FILTER_TRAINING_DATA_PATH, dataset, f"{split}.jsonl")
+    print(f"Load data from \033[33m{data_path}\033[0m")
+    
     data = load_jsonl(data_path)
+    print(f"Example is \033[33m{data[0]}\033[0m")
+    
     texts = [d["query_info_tokens"] for d in data]
     labels = [d["query_info_labels"] for d in data]
     if test_mode:
@@ -72,13 +76,17 @@ def build_dataset(dataset: str, split: str, max_len: int = 128, tokenizer=None, 
 
 
 def main(opt: argparse.Namespace):
+    print(f"Load model and tokneizer from \033[33m{opt.model_name_or_path}\033[0m")
     tokenizer = DebertaV2Tokenizer.from_pretrained(opt.model_name_or_path)
     model = DebertaV2ForTokenClassification.from_pretrained(opt.model_name_or_path, num_labels=2)
-    model.to('cuda')
+    model.to('cuda')  # TODO GPU or CPU?
 
     save_dir = os.path.join(opt.save_path, f"filter_{datetime.now().strftime(r'%Y%m%d_%H%M%S')}")
-    save_dir = "/data0/lizhong/multi_hop_rag/EfficientRAG/saved_models/filter/filter_20250401_043856"
+    save_dir = "/data0/lizhong/multi_hop_rag/EfficientRAG/saved_models/filter/filter_20250401_043856"  # TODO Specify a directory
+    print(f"Save dir is \033[33m{save_dir}\033[0m")
+
     run_name = f"{opt.dataset}-{datetime.now().strftime(r'%m%d%H%M')}"
+    print(f"Run name is \033[33m{run_name}\033[0m")
 
     train_dataset = build_dataset(opt.dataset, "train", opt.max_length, tokenizer, test_mode=opt.test)
     valid_dataset = build_dataset(opt.dataset, "valid", opt.max_length, tokenizer, test_mode=opt.test)
@@ -100,11 +108,11 @@ def main(opt: argparse.Namespace):
         logging_steps=opt.logging_steps,
         warmup_steps=opt.warmup_steps,
         save_only_model=True,
-        include_inputs_for_metrics=True,
-        # include_for_metrics=True,
+        # include_inputs_for_metrics=True,
+        include_for_metrics=['inputs'],
     )
 
-    from transformers import DataCollatorWithPadding  # 假设你使用这个作为处理类示例
+    from transformers import DataCollatorWithPadding  
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     trainer = Trainer(
         model=model,
@@ -112,9 +120,11 @@ def main(opt: argparse.Namespace):
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
         # tokenizer=tokenizer,
-        data_collator=data_collator,  # 使用处理类
+        data_collator=data_collator, 
         compute_metrics=eval_filter,
     )
+    
+    print("Start training")
     trainer.train(resume_from_checkpoint=True)
     print("Done.")
 

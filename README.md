@@ -1,43 +1,57 @@
 ```bash
 # 1. env
-        
-# 1. Unify the data format
-# python src/retrievers/data_processing.py
+export https_proxy=http://agent.baidu.com:8891
+git clone https://github.com/lizhongv/EfficientRAG.git
+cd EfficientRAG
 
-# 2. Prepare the corpus by extract documents 
-# python src/retrievers/multihop_data_extrator.py --dataset hotpotQA
-# python src/retrievers/multihop_data_extrator.py --dataset 2WikiMQA
-# python src/retrievers/multihop_data_extrator.py --dataset musique
+pip install uv
+uv venv effrag --python 3.10 && source effrag/bin/activate && uv pip install --upgrade pip
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+
+# 2. download model
+# pip install huggingface_hub
+# huggingface-cli download --resume-download facebook/contriever-msmarco --local-dir contriever-msmarco --local-dir-use-symlinks False
+# huggingface-cli download --resume-download microsoft/deberta-v3-large --local-dir deberta-v3-large --local-dir-use-symlinks False
+
+pip install modelscope
+modelscope download --model zl2272001/deberta-v3-large  --local_dir ../deberta-v3-large
+modelscope download --model zl2272001/contriever-msmarco  --local_dir ../contriever-msmarco
+
 
 # 3. Load all the processed data from the ModelScope community. 
 modelscope download --dataset zl2272001/EfficientRAG  --local_dir ./
 # tar -zcvf data.tar.gz data # 压缩
 tar -zxvf data.tar.gz # 解压
 
-# 
+# （1）Unify the data format
+# python src/retrievers/data_processing.py
 
-# Training Filter model
+# （2） Prepare the corpus by extract documents 
+# python src/retrievers/multihop_data_extrator.py --dataset hotpotQA
+# python src/retrievers/multihop_data_extrator.py --dataset 2WikiMQA
+# python src/retrievers/multihop_data_extrator.py --dataset musique
+
+# 4. Training Filter model
 python src/efficient_rag/filter_training.py \
     --dataset hotpotQA \
     --save_path saved_models/filter \
-    --model_name_or_path /data1/Public/LLMs/deberta-v3-large \   
+    --model_name_or_path ../deberta-v3-large \   
 
-
-# Training Labeler mode
-python src/efficient_rag/labeler_training.py \
+# 5. Training Labeler mode
+nohup python -u src/efficient_rag/labeler_training.py \
     --dataset hotpotQA \
-    --tags 2
+    --tags 2 \
+    --model_name_or_path ../deberta-v3-large &
 
+# tensorboard --logdir=saved_models/filter/filter_20250401_043856/log --host 0.0.0.0 --port 31827
 
-tensorboard --logdir=saved_models/filter/filter_20250401_043856/log --host 0.0.0.0 --port 31827
-
-#  Construct embedding
+#  6. Construct embedding
 python src/retrievers/passage_embedder.py \
     --passages data/corpus/hotpotQA/corpus.jsonl \
     --output_dir data/corpus/hotpotQA/contriever \
     --model_type contriever \
-    --model_name_or_path /data1/Public/LLMs/contriever \
-
+    --model_name_or_path ../contriever-msmarco \
 ```
 
 ## 数据合成

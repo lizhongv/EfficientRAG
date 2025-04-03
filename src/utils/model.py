@@ -8,7 +8,8 @@ from typing import Callable, Literal
 from tenacity import retry, stop_after_attempt
 from tqdm.rich import tqdm_rich
 
-from language_models import LanguageModel
+from src.language_models import LanguageModel
+from src.log import logger, LYELLOW, RESET
 
 
 @retry(stop=stop_after_attempt(3), reraise=False, retry_error_callback=lambda x: None)
@@ -24,16 +25,20 @@ def ask_model(
     if sleep:
         sleep_time = random.uniform(1.0, 3.0)
         time.sleep(sleep_time)
+
     if mode == "chat":
-        result = model.chat(prompt, system_msg, json_mode=(type == "json"))
-        # print(result)
+        response = model.chat(prompt, system_msg, json_mode=(type == "json"))
+
     elif mode == "completion":
-        result = model.complete(prompt)
+        response = model.complete(prompt)
+
     parser = get_type_parser(type)
-    info = parser(result)
+    info = parser(response)
+
     if check_if_valid is not None and not check_if_valid(info):
-        print(f"Invalid response {info}")
+        logger.error(f"Invalid response {info}")
         raise ValueError("Invalid response")
+
     return info
 
 
@@ -81,12 +86,19 @@ def ask_model_in_parallel(
 
 def get_type_parser(type: str) -> Callable:
     def json_parser(result: str):
-        # pattern = r"```json(.*?)```"
-        pattern = r"{.*?}"
+        pattern = r'\{.*\}'
         matches = re.findall(pattern, result, re.DOTALL)
-        if matches:
-            result = matches[0].strip()
-        return json.loads(result)
+
+        if not matches:
+            logger.error(f"No valid JSON object found: {result}")
+            return None
+
+        try:
+            json_str = matches[0].strip()
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing failed, error message: {e}, original content: {result}")
+            return None
 
     def text_parser(result: str):
         return result

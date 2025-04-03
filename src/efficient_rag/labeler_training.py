@@ -1,11 +1,13 @@
 # import wandb
+import transformers
 import argparse
 import os
 import sys
-from datetime import datetime
+import logging
 import torch
 import torch.nn as nn
 
+from datetime import datetime
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.nn import DataParallel
 from transformers import DebertaV2Tokenizer, EvalPrediction, Trainer, TrainingArguments
@@ -35,7 +37,9 @@ class LabelerTrainer(Trainer):
         inputs = {k: v.cuda() for k, v in inputs.items()}
         token_labels = inputs.pop("token_labels")
         sequence_labels = inputs.pop("sequence_labels")
+        
         outputs = model(**inputs)
+        
         token_logits = outputs.token_logits
         sequence_logits = outputs.sequence_logits
 
@@ -59,12 +63,16 @@ class LabelerTrainer(Trainer):
             sequence_logits.view(-1, module.sequence_labels),
             sequence_labels.view(-1),
         )
+        
         # wandb.log({"token_loss": token_loss, "sequence_loss": sequence_loss})
+        
         loss = token_loss + sequence_loss
+        
         return (loss, outputs) if return_outputs else loss
 
 
 def eval_labeler(pred: EvalPrediction):
+    """The function that will be used to compute metrics at evaluation."""
     tag_prediction = torch.tensor(pred.predictions[0].argmax(-1))
     token_prediction = torch.tensor(pred.predictions[1].argmax(-1))
     tag_label = torch.tensor(pred.label_ids[1])
@@ -125,10 +133,12 @@ def build_dataset(
     test_mode: bool = False,
     test_sample_cnt: int = 100,
 ):
-    data_path = os.path.join(
-        EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH, dataset, f"{split}.jsonl"
-    )
+    data_path = os.path.join(EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH, dataset, f"{split}.jsonl")
+    print(f"Load data from \033[33m{data_path}\033[0m")
+    
     data = load_jsonl(data_path)
+    print(f"Example is \033[33m{data[0]}\033[0m")
+    
     original_question = [d["question"] for d in data]
     chunk_tokens = [d["chunk_tokens"] for d in data]
     chunk_labels = [d["labels"] for d in data]
@@ -149,6 +159,16 @@ def build_dataset(
 
 
 def main(opt: argparse.Namespace):
+    # Setup logging
+    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+                        datefmt="%m/%d/%Y %H:%M:%S",
+                        level=logging.INFO,
+                        handlers=[logging.StreamHandler(sys.stdout)],)
+    transformers.utils.logging.set_verbosity_info()
+    transformers.utils.logging.set_verbosity(transformers.logging.INFO)
+    transformers.utils.logging.enable_default_handler()
+    transformers.utils.logging.enable_explicit_format()
+
     global tokenizer
     global CHUNK_TAG_MAPPING
 
@@ -159,7 +179,8 @@ def main(opt: argparse.Namespace):
     elif opt.tags == 3:
         WANDB_PROJ_NAME = "EfficientRAG_labeler"
         CHUNK_TAG_MAPPING = TAG_MAPPING
-    os.environ["WANDB_PROJECT"] = WANDB_PROJ_NAME
+
+    # os.environ["WANDB_PROJECT"] = WANDB_PROJ_NAME
 
     global WEIGHT_AVERAGE
     if opt.weight_average:
@@ -172,6 +193,7 @@ def main(opt: argparse.Namespace):
     else:
         WEIGHT_AVERAGE = [1.0, 1.0]
 
+    print(f"Load model and tokenizer from \033[33m{opt.model_name_or_path}\033[0m")
     tokenizer = DebertaV2Tokenizer.from_pretrained(opt.model_name_or_path)
     model = DebertaForSequenceTokenClassification.from_pretrained(
         opt.model_name_or_path,
@@ -182,11 +204,16 @@ def main(opt: argparse.Namespace):
         2: "saved_models/labeler_two",
         3: "saved_models/labeler",
     }
+
     save_dir = os.path.join(
         save_path_mapping[opt.tags],
         f"labeler_{datetime.now().strftime(r'%Y%m%d_%H%M%S')}",
     )
+    print(f"Save dir is \033[33m{save_dir}\033[0m")
+
     run_name = f"{opt.dataset}-{datetime.now().strftime(r'%m%d%H%M')}"
+    print(f"Run name is \033[33m{run_name}\033[0m")
+
     train_dataset = build_dataset(
         opt.dataset,
         "train",
@@ -208,18 +235,19 @@ def main(opt: argparse.Namespace):
         learning_rate=opt.lr,
         per_device_train_batch_size=opt.batch_size,
         per_device_eval_batch_size=96,
-        weight_decay=0.01,
         logging_dir=os.path.join(save_dir, "log"),
+        logging_steps=opt.logging_steps,
         save_strategy="epoch" if not opt.test else "no",
         eval_strategy="steps",
         eval_steps=opt.eval_steps,
         # report_to="wandb",
         report_to="tensorboard",
         run_name=run_name,
-        logging_steps=opt.logging_steps,
+        weight_decay=0.01,
         warmup_steps=opt.warmup_steps,
         save_only_model=True,
-        include_inputs_for_metrics=True,
+        # include_inputs_for_metrics=True,
+        include_for_metrics=['inputs'],
     )
 
     from transformers import DataCollatorWithPadding  # 假设你使用这个作为处理类示例

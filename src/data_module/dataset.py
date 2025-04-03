@@ -5,7 +5,7 @@ from typing import Any, Literal, NamedTuple, Union
 
 from torch.utils.data import Dataset
 
-from conf import DATASET_PATH
+from src.conf import DATASET_PATH
 
 ChunkInfo = NamedTuple("ChunkInfo", id=int, title=str, chunk=str)
 AllDatasets = Literal["hotpotQA", "wikiMQA", "musique"]
@@ -89,6 +89,7 @@ class MultiHopDataset(Dataset):
         raise NotImplementedError
 
     def load_data(self, data_path: str):
+        print(f"Load data from \033[33m{data_path}\033[0m")
         with open(data_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data
@@ -143,7 +144,7 @@ class HotpotQADataset(MultiHopDataset):
 
     def get_hop(self, sample: dict) -> str:
         return 2
-    
+
     def get_id(self, sample: dict) -> str:
         return sample["_id"]
 

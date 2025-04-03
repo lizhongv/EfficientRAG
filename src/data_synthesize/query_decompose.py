@@ -1,20 +1,24 @@
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
 import argparse
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Iterator
-
 from tqdm.rich import tqdm_rich
+from tqdm import tqdm
 
-from conf import MODEL_DICT, SYNTHESIZED_DECOMPOSED_DATA_PATH
-from data_module import get_dataset
-from data_synthesize.prompts import *
-from language_models import LanguageModel, get_model
-from utils import ask_model, load_jsonl
+if True:
+    import os
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))))
+    os.chdir(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))))
+
+    from src.conf import MODEL_DICT, SYNTHESIZED_DECOMPOSED_DATA_PATH
+    from src.data_module import get_dataset
+    from src.data_synthesize.prompts import *
+    from src.language_models import LanguageModel, get_model, MODEL_DICT
+    from src.utils import ask_model, load_jsonl
+    from src.log import logger, LYELLOW, RESET
 
 
 class DatasetParser:
@@ -30,30 +34,43 @@ class DatasetParser:
             ending = len(self.dataset)
         samples = self.dataset[starting:ending]
         results = []
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            tasks = {
-                executor.submit(self.process_sample, sample): idx
-                for idx, sample in enumerate(samples)
-            }
-            for task in tqdm_rich(
-                as_completed(tasks), total=len(tasks), desc="Processing..."
-            ):
-                idx = tasks[task]
-                try:
-                    result = task.result()
-                except Exception as e:
-                    result = {"state": "failed"}
-                results.append((result, idx))
-        results = [result for result, idx in sorted(results, key=lambda x: x[1])]
+
+        # with ThreadPoolExecutor(max_workers=workers) as executor:
+        #     tasks = {
+        #         executor.submit(self.process_sample, sample): idx
+        #         for idx, sample in enumerate(samples)
+        #     }
+        #     for task in tqdm_rich(
+        #         as_completed(tasks), total=len(tasks), desc="Processing..."
+        #     ):
+        #         idx = tasks[task]
+        #         try:
+        #             result = task.result()
+        #         except Exception as e:
+        #             result = {"state": "failed"}
+        #         results.append((result, idx))
+
+        for idx, sample in tqdm(enumerate(samples), total=len(samples), desc="Processing..."):
+            try:
+                result = self.process_sample(sample)
+            except Exception as e:
+                result = {"state": "failed"}
+                logger.error(f"raise a error {e}")
+            results.append((result, idx))
+
+        results = [result for result, idx in sorted(
+            results, key=lambda x: x[1])]
         return results
 
     def process_sample(self, sample: dict) -> dict:
         prompt = self.parse_sample(sample)
         check_if_valid = self.check_if_valid(sample)
-        result = ask_model(
+        json_res = ask_model(
             self.model, prompt, mode="chat", type="json", check_if_valid=check_if_valid
         )
-        result = self.post_process(result, sample)
+        result = self.post_process(json_res, sample)
+        # result['prompt'] = prompt  # TODO 临时添加 prompt
+        result['type'] = sample['type']
         return result
 
     def parse_failed(self, data_path: str):
@@ -121,7 +138,7 @@ class WikiMQAParser(DatasetParser):
             decomposed_str = WikiMQAFactPrompt.format(
                 question_id=idx + 1,
                 doc_title=item["title"],
-                facts=item["chunk"][len(item["title"]) + 1 :].strip(),
+                facts=item["chunk"][len(item["title"]) + 1:].strip(),
                 evidence=item["evidence"],
             )
             chunks.append(decomposed_str)
@@ -164,7 +181,8 @@ class WikiMQAParser(DatasetParser):
     def hierarchical_dataset(self, hard: bool = False) -> None:
         hard_question_types = ["bridge_comparison"]
         if hard == True:
-            self.dataset = [d for d in self.dataset if d["type"] in hard_question_types]
+            self.dataset = [
+                d for d in self.dataset if d["type"] in hard_question_types]
         else:
             self.dataset = [
                 d for d in self.dataset if d["type"] not in hard_question_types
@@ -187,7 +205,8 @@ class HotpotQAParser(DatasetParser):
 
         for idx, item in enumerate(sample["supporting_facts"]):
             decomposed_str = hotpotQAFactPrompt.format(
-                question_id=idx + 1, facts=item["chunk"]
+                question_id=idx + 1,
+                facts=item["chunk"]
             )
             chunks.append(decomposed_str)
         chunks = "\n".join(chunks)
@@ -203,8 +222,9 @@ class HotpotQAParser(DatasetParser):
     def post_process(self, info: dict, sample: dict) -> dict:
         if info is None:
             sample["state"] = "failed"
-            print(f"Failed to synthesize sample {sample['id']}")
+            logger.error(f"Failed to synthesize sample {sample['id']}")
             return sample
+
         for idx, paragraph in enumerate(sample["supporting_facts"]):
             info["decomposed_questions"][f"{idx + 1}"]["positive_paragraph"] = (
                 paragraph["chunk"]
@@ -222,7 +242,8 @@ class HotpotQAParser(DatasetParser):
         )
 
     def hierarchical_dataset(self, hard: bool = False):
-        raise NotImplementedError("HotpotQA does not have different difficulty levels")
+        raise NotImplementedError(
+            "HotpotQA does not have different difficulty levels")
 
 
 class MuSiQueParser(DatasetParser):
@@ -256,7 +277,8 @@ class MuSiQueParser(DatasetParser):
             )
             decomposed_questions.append(decomposed_str)
         decomposed_questions = "\n".join(decomposed_questions)
-        prompt_template = self.prompt_template_mapping[sample["id"].split("_")[0]]
+        prompt_template = self.prompt_template_mapping[sample["id"].split("_")[
+            0]]
         prompt = prompt_template.format(
             question=question, decomposed_questions=decomposed_questions
         )
@@ -306,11 +328,12 @@ def parse_args():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["musique", "musique-simple", "2WikiMQA", "2WikiMQA-small", "hotpotQA"],
+        choices=["musique", "musique-simple",
+                 "2WikiMQA", "2WikiMQA-small", "hotpotQA"],
         required=True,
     )
     parser.add_argument("--split", type=str, default="demo")
-    parser.add_argument("--model", default="deepseek")
+    parser.add_argument("--model", default="gpt-4o", choices=MODEL_DICT.keys())
     parser.add_argument("--workers", type=int, default=10)
     parser.add_argument("--starting", type=int, default=0)
     parser.add_argument("--ending", type=int, default=None)
@@ -333,13 +356,20 @@ def main(opt: argparse.Namespace):
     parser = get_parser(opt.dataset, opt.model, opt.split)
 
     output_dir = os.path.join(SYNTHESIZED_DECOMPOSED_DATA_PATH, opt.dataset)
+    print(f"Ouput dir is \033[33m{output_dir}\033[0m")
     os.makedirs(output_dir, exist_ok=True)
-    with open(os.path.join(output_dir, f"{opt.split}.jsonl"), "w+") as f:
-        for info in parser.parse(
-            workers=opt.workers, starting=opt.starting, ending=opt.ending
-        ):
+
+    file_path = os.path.join(output_dir, f"{opt.split}.jsonl")
+    print(f"writing data to \033[33m{file_path}\033[0m")
+
+    results = parser.parse(workers=opt.workers,
+                           starting=opt.starting, ending=opt.ending)
+    with open(file_path, "w+") as f:
+        for info in tqdm(results, desc="writing info"):
             data = json.dumps(info)
             f.write(data + "\n")
+
+    print("Done.")
 
 
 if __name__ == "__main__":

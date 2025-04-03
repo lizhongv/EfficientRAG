@@ -1,21 +1,21 @@
+# vllm
+# sentencepiece>=0.2.0
+transformers==4.46  # 修改transformers版本适配 ImportError: cannot import name 'StableDropout' from 'transformers.models.deberta_v2.modeling_deberta_v2'
 faiss-cpu
 msal
 numpy
 openai>1.0.0
 Requests
-tqdm
-transformers==4.46
 rich
 tenacity
 spacy
 datasets>=2.18.0
 wandb
-sentencepiece>=0.2.0
 accelerate==0.29.1
 scikit-learn
 deepspeed>=0.14.1
-vllm
 ray[serve]
 black
 tensorboard 
 tensorboardX
+python-dotenv

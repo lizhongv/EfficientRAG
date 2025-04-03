@@ -5,7 +5,7 @@ from typing import Optional, Union
 
 import numpy as np
 import openai
-from openai import AzureOpenAI
+from openai import AzureOpenAI, OpenAI
 from openai._types import NotGiven
 
 from .base import LanguageModel
@@ -14,6 +14,9 @@ from .cloudgpt import auto_refresh_token, cloudGPT_available_models, get_openai_
 AOAI_ENDPOINT = os.environ.get("AOAI_ENDPOINT", None)
 if AOAI_ENDPOINT is None:
     AOAI_ENDPOINT = "https://cloudgpt-openai.azure-api.net/"
+
+OPENAI_API_KEY = "sk-bA4N4H8xDy5uurP6y5o4EBXHi0ewyT3lzVvW2kepzKPtYDlP"
+OPENAI_BASE_URL = "https://api.openai-proxy.org/v1"
 
 SLEEP_SEC = 3
 
@@ -27,10 +30,14 @@ class AOAI(LanguageModel):
     ):
         super().__init__(model)
         self.api_version = api_version
-        self.client = AzureOpenAI(
-            azure_endpoint=AOAI_ENDPOINT,
-            api_key=get_openai_token(),
-            api_version=self.api_version,
+        # self.client = AzureOpenAI(
+        #     azure_endpoint=AOAI_ENDPOINT,
+        #     api_key=get_openai_token(),
+        #     api_version=self.api_version,
+        # )
+        self.client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            base_url=OPENAI_BASE_URL,
         )
         self.embedding_model = embedding_model
         auto_refresh_token()
@@ -95,6 +102,7 @@ class AOAI(LanguageModel):
         ]
         response = self.client.chat.completions.create(
             model=self.model,
+            # model="gpt-4o",
             response_format={"type": "json_object"} if json_mode else NotGiven(),
             messages=msg,
             temperature=temperature,

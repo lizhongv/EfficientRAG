@@ -4,10 +4,14 @@ from .deepseek import DeepSeek
 from .llama import LlamaServer
 
 MODEL_DICT = {
-    "gpt35": "gpt-35-turbo-1106",
-    "gpt4": "gpt-4-0125-preview",
+    "gpt-4.5": "gpt-4.5-preview ",
+    "gpt-4": "gpt-4-0125-preview",
+    "gpt-4o": "gpt-4o",
+    "gpt-4-turbo": "gpt-4-turbo",
+    
     "llama": "Meta-Llama-3-70B-Instruct",
     "llama-8B": "Meta-Llama-3-8B-Instruct",
+    
     "deepseek": "deepseek-chat",
 }
 

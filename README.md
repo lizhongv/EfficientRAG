@@ -6,7 +6,19 @@ cd EfficientRAG
 
 pip install uv
 uv venv effrag --python 3.10 && source effrag/bin/activate && uv pip install --upgrade pip
+
+# 安装vllm
+export VLLM_VERSION=0.6.1.post1
+export PYTHON_VERSION=310
+
+pip install https://github.com/vllm-project/vllm/releases/download/v${VLLM_VERSION}/vllm-${VLLM_VERSION}+cu118-cp${PYTHON_VERSION}-cp${PYTHON_VERSION}-manylinux1_x86_64.whl --extra-index-url https://download.pytorch.org/whl/cu118
+
+pip install setuptools
+
+# 安装其余依赖
 pip install -r requirements.txt
+
+# 下载
 python -m spacy download en_core_web_sm
 
 # 2. download model
@@ -53,23 +65,39 @@ python src/retrievers/passage_embedder.py \
     --model_type contriever \
     --model_name_or_path ../contriever-msmarco \
 ```
+## wandb 使用
+```bash
+# 安装
+pip install wandb
+# 官网注册
+https://wandb.ai/site
+# 登录 API 密钥
+https://wandb.ai/site
+# 初始化项目
+os.environ["WANDB_PROJECT"] = "EfficientRAG_filter"
+TrainingArguments 设置 run_name
+```
 
 ## 数据合成
-
-
 ```bash
-# Question Decomposition Prompt  
+项目目录下 增加 .env
 
-You are assigned a multi-hop question decomposition task.  
-Your mission is to decompose the original multi-hop question into a list of single-hop sub_questions, based on supporting  documents for each sub_question, and such that you can answer each sub_question independently from each document.  Each document infers a sub_question id which starts with '#'. The evidence in the document indicates the relation of two  entities, in the form of 'entity1 - relation - entity2'.  
-The JSON output must contain the following keys:  
-- "question": a string, the original multi-hop question.  
-- "decomposed_questions": a dict of sub_questions and answers. The key should be the sub_question number(string  format), and each value should be a dict containing:  
-- "sub_question": a string, the decomposed single-hop sub_question. It MUST NOT contain information more than the  original question and its dependencies. NEVER introduce information from documents.  
-- "answer": a string, the answer of the sub_question.  
-- "dependency": a list of sub_question number(string format). If the sub_question relies on the answer of other  sub_questions, you should list the sub_question number here. Leave it empty for now because the questions now are all  comparison type.  
-- "document": a string, the document id that supports the sub_question.  
-Notice that you don’t need to come out the compare question, just the sub_questions and answers.
+OPENAI_API_KEY=your_api_key_here
+OPENAI_BASE_URL=your_base_url_here
+
+DEEPSEEK_BASE_URL="https://api.deepseek.com"
+DEEPSEEK_API_KEY="sk-768a72eaa5e14187b8edaa67023f27d3"
+
+
+# Question Decomposition Prompt   
+# src/data_synthesize/prompts/query_labeling.py
+
+
+python src/data_synthesize/query_decompose.py \
+    --dataset hotpotQA \
+    --split train \
+    --model deepseek \
+    --ending 10
 ```
 
 ```bash

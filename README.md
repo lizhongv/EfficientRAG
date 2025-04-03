@@ -80,23 +80,23 @@ TrainingArguments 设置 run_name
 
 ## 数据合成
 ```bash
-项目目录下 增加 .env
+# 在 src/language_models/aoai.py 中添加
 
 OPENAI_API_KEY=your_api_key_here
 OPENAI_BASE_URL=your_base_url_here
 
-DEEPSEEK_BASE_URL="https://api.deepseek.com"
-DEEPSEEK_API_KEY="sk-768a72eaa5e14187b8edaa67023f27d3"
+# 在 src/language_models/deepseek.py 中添加
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_API_KEY = ""
+DASHSCOPE_API_KEY = ""
+DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 
 # Question Decomposition Prompt   
-# src/data_synthesize/prompts/query_labeling.py
-
-
 python src/data_synthesize/query_decompose.py \
     --dataset hotpotQA \
     --split train \
-    --model deepseek \
+    --model gpt-4o \
     --ending 10
 ```
 

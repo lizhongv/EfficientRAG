@@ -69,7 +69,7 @@ class DatasetParser:
             self.model, prompt, mode="chat", type="json", check_if_valid=check_if_valid
         )
         result = self.post_process(json_res, sample)
-        # result['prompt'] = prompt  # TODO 临时添加 prompt
+        result['prompt'] = prompt  # TODO 临时添加 prompt
         result['type'] = sample['type']
         return result
 
@@ -202,7 +202,6 @@ class HotpotQAParser(DatasetParser):
         question = sample["question"]
         question_type = sample["type"]
         chunks = []
-
         for idx, item in enumerate(sample["supporting_facts"]):
             decomposed_str = hotpotQAFactPrompt.format(
                 question_id=idx + 1,
@@ -224,11 +223,9 @@ class HotpotQAParser(DatasetParser):
             sample["state"] = "failed"
             logger.error(f"Failed to synthesize sample {sample['id']}")
             return sample
-
         for idx, paragraph in enumerate(sample["supporting_facts"]):
             info["decomposed_questions"][f"{idx + 1}"]["positive_paragraph"] = (
-                paragraph["chunk"]
-            )
+                paragraph["chunk"])
             info["decomposed_questions"][f"{idx + 1}"]["positive_paragraph_idx"] = (
                 paragraph["id"]
             )
@@ -249,7 +246,8 @@ class HotpotQAParser(DatasetParser):
 class MuSiQueParser(DatasetParser):
     def __init__(self, model: str, split: str) -> None:
         super().__init__(model)
-        self.dataset = get_dataset("musique-simple", split)
+        # self.dataset = get_dataset("musique-simple", split)
+        self.dataset = get_dataset("musique", split)  # TODO
         self.prompt_template_mapping = {
             "2hop": MuSiQueCompose2HopPrompt,
             "3hop1": MuSiQueCompose3HopPrompt,
@@ -262,13 +260,17 @@ class MuSiQueParser(DatasetParser):
     def parse_sample(self, sample: dict) -> dict:
         question = sample["question"]
         decomposed_questions = []
-        for idx, (paragraph_idx, decompose_question, decompose_answer) in enumerate(
-            zip(
-                sample["decomposition"]["paragraph_support_idx"],
-                sample["decomposition"]["question"],
-                sample["decomposition"]["answer"],
-            )
-        ):
+        # for idx, (paragraph_idx, decompose_question, decompose_answer) in enumerate(
+        #     zip(
+        #         sample["decomposition"]["paragraph_support_idx"],
+        #         sample["decomposition"]["question"],
+        #         sample["decomposition"]["answer"],
+        #     )
+        # ):
+        for idx, decomposition in enumerate(sample['decomposition']):
+            paragraph_idx = decomposition['paragraph_support_idx']
+            decompose_question = decomposition['question']
+            decompose_answer = decomposition['answer']
             paragraph = sample["chunks"][paragraph_idx]
             decomposed_str = MuSiQueSupportingFactPrompt.format(
                 question_id=idx + 1,
@@ -289,9 +291,13 @@ class MuSiQueParser(DatasetParser):
             sample["state"] = "failed"
             print(f"Failed to synthesize sample {sample['id']}")
             return sample
-        for idx, paragraph_idx in enumerate(
-            sample["decomposition"]["paragraph_support_idx"]
+        # for idx, paragraph_idx in enumerate(
+        #     sample["decomposition"]["paragraph_support_idx"]
+        # ):
+        for idx, decomposition in enumerate(
+            sample["decomposition"]
         ):
+            paragraph_idx = decomposition["paragraph_support_idx"]
             paragraph = sample["chunks"][paragraph_idx]
             info["decomposed_questions"][f"{idx + 1}"]["positive_paragraph"] = paragraph
             info["decomposed_questions"][f"{idx + 1}"][
@@ -304,7 +310,8 @@ class MuSiQueParser(DatasetParser):
     def check_if_valid(self, sample: dict):
         def is_valid(info: dict):
             if len(info["decomposed_questions"]) != len(
-                sample["decomposition"]["question"]
+                # sample["decomposition"]["question"]
+                sample['decomposition']
             ):
                 return False
             return True

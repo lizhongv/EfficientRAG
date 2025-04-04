@@ -101,8 +101,8 @@ class AOAI(LanguageModel):
             {"role": "user", "content": messages},
         ]
         response = self.client.chat.completions.create(
-            model=self.model,
-            # model="gpt-4o",
+            # model=self.model,
+            model="gpt-4o",
             response_format={"type": "json_object"} if json_mode else NotGiven(),
             messages=msg,
             temperature=temperature,

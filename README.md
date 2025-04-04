@@ -34,7 +34,8 @@ modelscope download --model zl2272001/contriever-msmarco  --local_dir ../contrie
 # 3. Load all the processed data from the ModelScope community. 
 modelscope download --dataset zl2272001/EfficientRAG  --local_dir ./
 # tar -zcvf data.tar.gz data # 压缩
-tar -zxvf data.tar.gz # 解压
+# mkdir temp
+# tar -zxvf data.tar.gz -C temp # 解压
 
 # （1）Unify the data format
 # python src/retrievers/data_processing.py

@@ -5,16 +5,21 @@ import argparse
 import json
 import os
 import sys
-
 import spacy
 from tqdm.rich import tqdm_rich
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from conf import (
-    SYNTHESIZED_NEGATIVE_SAMPLING_EXTRACTED_DATA_PATH,
-    SYNTHESIZED_NEGATIVE_SAMPLING_LABELED_DATA_PATH,
-)
-from utils import load_jsonl, write_jsonl
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    print(f"project dir: {pro_dir}")
+
+    from src.conf import (
+        SYNTHESIZED_NEGATIVE_SAMPLING_EXTRACTED_DATA_PATH,
+        SYNTHESIZED_NEGATIVE_SAMPLING_LABELED_DATA_PATH,
+    )
+    from src.utils import load_jsonl, write_jsonl
+    from src.log import logger
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -74,7 +79,7 @@ def label_word(
                         lemma_comp_token,
                         token_idx,
                         prev_idx,
-                        lemma_paragraph_tokens[token_idx - 1 : token_idx + 2],
+                        lemma_paragraph_tokens[token_idx - 1: token_idx + 2],
                     )
                 break
             # look backward
@@ -90,7 +95,7 @@ def label_word(
                         lemma_comp_token,
                         token_idx,
                         prev_idx,
-                        lemma_paragraph_tokens[token_idx - 1 : token_idx + 2],
+                        lemma_paragraph_tokens[token_idx - 1: token_idx + 2],
                     )
                 break
 
@@ -176,12 +181,13 @@ def main(opts: argparse.Namespace):
             for k in infos.keys():
                 infos[k] += results[k]
 
-    for k, v in infos.items():
-        v = v / num_samples * 100
-        print(f"{k}: {v:.2f}")
+    # for k, v in infos.items():
+    #     v = v / num_samples * 100
+    #     print(f"{k}: {v:.2f}")
 
     os.makedirs(os.path.dirname(opts.save_path), exist_ok=True)
     write_jsonl(data, opts.save_path)
+    logger.info(f"Done!")
 
 
 def parse_args():

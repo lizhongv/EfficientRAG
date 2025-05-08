@@ -13,18 +13,20 @@ from torch.nn import DataParallel
 from transformers import DebertaV2Tokenizer, EvalPrediction, Trainer, TrainingArguments
 
 if True:
-    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    from conf import (
+    pro_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    from src.conf import (
         EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH,
         MODEL_PATH,
         TAG_MAPPING,
         TAG_MAPPING_TWO,
         TERMINATE_ID,
     )
-    from efficient_rag.data import LabelerDataset
-    from efficient_rag.model import DebertaForSequenceTokenClassification
-    from utils import load_jsonl
+    from src.efficient_rag.data import LabelerDataset
+    from src.efficient_rag.model import DebertaForSequenceTokenClassification
+    from src.utils import load_jsonl
 
 
 class LabelerTrainer(Trainer):
@@ -32,14 +34,15 @@ class LabelerTrainer(Trainer):
         self,
         model: DebertaForSequenceTokenClassification,
         inputs: dict,
+        num_items_in_batch: None,
         return_outputs: bool = False,
     ):
         inputs = {k: v.cuda() for k, v in inputs.items()}
         token_labels = inputs.pop("token_labels")
         sequence_labels = inputs.pop("sequence_labels")
-        
+
         outputs = model(**inputs)
-        
+
         token_logits = outputs.token_logits
         sequence_logits = outputs.sequence_logits
 
@@ -63,11 +66,11 @@ class LabelerTrainer(Trainer):
             sequence_logits.view(-1, module.sequence_labels),
             sequence_labels.view(-1),
         )
-        
+
         # wandb.log({"token_loss": token_loss, "sequence_loss": sequence_loss})
-        
+
         loss = token_loss + sequence_loss
-        
+
         return (loss, outputs) if return_outputs else loss
 
 
@@ -112,7 +115,7 @@ def parse_args():
     parser.add_argument("--dataset", required=True, type=str)
     parser.add_argument("--lr", help="learning rate", default=5e-6, type=float)
     parser.add_argument("--epoch", default=2, type=int)
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--max_length", type=int, default=384)
     parser.add_argument("--warmup_steps", type=int, default=200)
     parser.add_argument("--eval_steps", type=int, default=200)
@@ -120,7 +123,8 @@ def parse_args():
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--test_samples", type=int, default=100)
     parser.add_argument("--weight_average", action="store_true")
-    parser.add_argument("--model_name_or_path", type=str, default="microsoft/deberta-v3-large", help="Path to load model")
+    parser.add_argument("--model_name_or_path", type=str,
+                        default="microsoft/deberta-v3-large", help="Path to load model")
     args = parser.parse_args()
     return args
 
@@ -133,12 +137,13 @@ def build_dataset(
     test_mode: bool = False,
     test_sample_cnt: int = 100,
 ):
-    data_path = os.path.join(EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH, dataset, f"{split}.jsonl")
+    data_path = os.path.join(
+        EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH, dataset, f"{split}.jsonl")
     print(f"Load data from \033[33m{data_path}\033[0m")
-    
+
     data = load_jsonl(data_path)
     print(f"Example is \033[33m{data[0]}\033[0m")
-    
+
     original_question = [d["question"] for d in data]
     chunk_tokens = [d["chunk_tokens"] for d in data]
     chunk_labels = [d["labels"] for d in data]
@@ -160,7 +165,7 @@ def build_dataset(
 
 def main(opt: argparse.Namespace):
     # Setup logging
-    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    logging.basicConfig(format="[%(asctime)s][%(levelname)s][%(name)s] - %(message)s",
                         datefmt="%m/%d/%Y %H:%M:%S",
                         level=logging.INFO,
                         handlers=[logging.StreamHandler(sys.stdout)],)
@@ -179,6 +184,8 @@ def main(opt: argparse.Namespace):
     elif opt.tags == 3:
         WANDB_PROJ_NAME = "EfficientRAG_labeler"
         CHUNK_TAG_MAPPING = TAG_MAPPING
+    else:
+        raise ValueError("Only 2 or 3 tags are supported.")
 
     # os.environ["WANDB_PROJECT"] = WANDB_PROJ_NAME
 
@@ -246,22 +253,20 @@ def main(opt: argparse.Namespace):
         weight_decay=0.01,
         warmup_steps=opt.warmup_steps,
         save_only_model=True,
-        # include_inputs_for_metrics=True,
         include_for_metrics=['inputs'],
     )
 
-    from transformers import DataCollatorWithPadding  # 假设你使用这个作为处理类示例
+    from transformers import DataCollatorWithPadding
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     trainer = LabelerTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
-        # tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=eval_labeler,
     )
-    trainer.train(resume_from_checkpoint=True)
+    trainer.train(resume_from_checkpoint=False)
     print("Done.")
 
 

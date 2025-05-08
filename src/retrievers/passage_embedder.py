@@ -3,10 +3,14 @@ import os
 import pickle
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from retrievers.utils.utils import load_passages
-from embeddings import Embedder, ModelTypes
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    from src.retrievers.utils.utils import load_passages
+    from src.retrievers.embeddings import Embedder, ModelTypes
+    from src.log.logging_config import logger, LBLUE, LGREEN, LRED, RESET
+    logger.info(f"pro_dir: {pro_dir}")
 
 
 def parse_args():
@@ -35,7 +39,7 @@ def main(opts):
         chunk_size=opts.chunk_size,
         text_normalize=True,
     )
-    print(f"Loading passages from {opts.passages}")
+    logger.info(f"Loading passages from {opts.passages}")
     data = load_passages(opts.passages)
     output_dir = opts.output_dir
     if not os.path.isdir(output_dir):
@@ -46,7 +50,7 @@ def main(opts):
         with open(output_file, "wb") as f:
             pickle.dump((ids, embeddings), f)
 
-        print(f"Save {len(ids)} embeddings to {output_file}")
+        logger.info(f"Save {len(ids)} embeddings to {output_file}")
 
 
 if __name__ == "__main__":

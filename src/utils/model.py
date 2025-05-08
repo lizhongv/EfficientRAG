@@ -1,45 +1,72 @@
 import json
 import random
 import re
+import openai
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Literal
-
-from tenacity import retry, stop_after_attempt
-from tqdm.rich import tqdm_rich
+from typing import Callable, Literal, Optional, TypeVar
+from tqdm import tqdm
+from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
 from src.language_models import LanguageModel
 from src.log import logger, LYELLOW, RESET
 
 
-@retry(stop=stop_after_attempt(3), reraise=False, retry_error_callback=lambda x: None)
+# @retry(stop=stop_after_attempt(3), reraise=False, retry_error_callback=lambda x: None)
+@retry(
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception_type(
+        (openai.APIConnectionError, openai.RateLimitError, openai.APIError)),
+    reraise=True,
+    before_sleep=lambda retry_state: logger.warning(
+        f"Retrying ({retry_state.attempt_number}/3) due to: {retry_state.outcome.exception()}"
+    )
+)
 def ask_model(
     model: LanguageModel,
     prompt: str,
     system_msg: str = None,
-    type: Literal["json", "text"] = "json",
-    check_if_valid: Callable = None,
+    response_type: Literal["json", "text"] = "json",
+    validator: Optional[Callable] = None,
     sleep: bool = True,
     mode: Literal["chat", "completion"] = "chat",
 ) -> dict:
+    # 1. 随机延迟防止速率限制
     if sleep:
-        sleep_time = random.uniform(1.0, 3.0)
-        time.sleep(sleep_time)
+        time.sleep(random.uniform(1.0, 3.0))
 
-    if mode == "chat":
-        response = model.chat(prompt, system_msg, json_mode=(type == "json"))
+     # 2. 调用模型
+    try:
+        if mode == "chat":
+            response = model.chat(prompt, system_msg,
+                                  json_mode=(response_type == "json"))
+        elif mode == "completion":
+            response = model.complete(prompt)
+        else:
+            logger.error(f"Invalid mode: {mode}")
+            raise
+    except Exception as e:
+        logger.error(f"Model call failed: {str(e)}")
+        raise
 
-    elif mode == "completion":
-        response = model.complete(prompt)
+    # 3. 检查空响应
+    if not response or not response.strip():
+        logger.error("Received empty response")
+        raise ValueError("Empty response from model")
 
-    parser = get_type_parser(type)
-    info = parser(response)
+    # 4. 解析响应
+    try:
+        parsed = get_type_parser(response_type)(response)
+    except Exception as e:
+        logger.error(f"Failed to parse response: {e}\nResponse: {response}")
+        raise ValueError(f"Response parsing failed")
 
-    if check_if_valid is not None and not check_if_valid(info):
-        logger.error(f"Invalid response {info}")
-        raise ValueError("Invalid response")
+    # 5. 验证响应
+    if validator and not validator(parsed):
+        logger.error(f"Validation failed for response: {parsed}")
+        raise ValueError("Response validation failed")
 
-    return info
+    return parsed
 
 
 def ask_model_in_parallel(
@@ -71,7 +98,7 @@ def ask_model_in_parallel(
             )
         }
         results = []
-        for future in tqdm_rich(
+        for future in tqdm(
             as_completed(tasks), total=len(tasks), desc=desc, disable=not verbose
         ):
             task_id = tasks[future]
@@ -86,19 +113,20 @@ def ask_model_in_parallel(
 
 def get_type_parser(type: str) -> Callable:
     def json_parser(result: str):
-        pattern = r'\{.*\}'
-        matches = re.findall(pattern, result, re.DOTALL)
+        return json.loads(result)
+        # pattern = r'\{.*\}'
+        # matches = re.findall(pattern, result, re.DOTALL)
 
-        if not matches:
-            logger.error(f"No valid JSON object found: {result}")
-            return None
+        # if not matches:
+        #     logger.error(f"No valid JSON object found: {result}")
+        #     return None
 
-        try:
-            json_str = matches[0].strip()
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing failed, error message: {e}, original content: {result}")
-            return None
+        # try:
+        #     json_str = matches[0].strip()
+        #     return json.loads(json_str)
+        # except json.JSONDecodeError as e:
+        #     logger.error(f"JSON parsing failed, error message: {e}, original content: {result}")
+        #     return None
 
     def text_parser(result: str):
         return result

@@ -5,19 +5,24 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tqdm.rich import tqdm_rich
+from tqdm import tqdm
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    print(f"project dir: {pro_dir}")
 
-from prompts.span_labeling import SPAN_LABELING_PROMPT, SPAN_LABELING_SYSTEM_PROMPT
-
-from conf import (
-    MODEL_DICT,
-    SYNTHESIZED_DECOMPOSED_DATA_PATH,
-    SYNTHESIZED_SPAN_LABELING_DATA_PATH,
-)
-from language_models import AOAI, LlamaServer
-from utils import ask_model, load_jsonl
+    from src.data_synthesize.prompts.span_labeling import SPAN_LABELING_PROMPT, SPAN_LABELING_SYSTEM_PROMPT
+    from src.conf import (
+        MODEL_DICT,
+        SYNTHESIZED_DECOMPOSED_DATA_PATH,
+        SYNTHESIZED_SPAN_LABELING_DATA_PATH,
+    )
+    from src.language_models import get_model
+    from src.utils import ask_model, load_jsonl
+    from src.log import logger
+    logger.info(f"project dir: {pro_dir}")
 
 BEGIN_OF_QUESTION_SPAN_TOKEN = "<q-span>"
 END_OF_QUESTION_SPAN_TOKEN = "</q-span>"
@@ -34,14 +39,12 @@ ANSWER_SPAN_TOKEN_PATTERN = (
 
 class SpanLabeler:
     def __init__(self, model: str, dataset: str, split: str) -> None:
-        if "gpt" in model:
-            self.model = AOAI(model)
-        elif "Llama" in model:
-            self.model = LlamaServer(model)
+        self.model = get_model(model)
 
         decomposed_data_path = os.path.join(
             SYNTHESIZED_DECOMPOSED_DATA_PATH, dataset, f"{split}.jsonl"
         )
+        logger.info(f"Loading decomposed data from: {decomposed_data_path}")
         self.data = load_jsonl(decomposed_data_path)
         self.data_mapping = {d["id"]: d for d in self.data}
         # self.check_if_valid = lambda x: True
@@ -74,7 +77,7 @@ class SpanLabeler:
                     for idx, sample in enumerate(data)
                 }
                 results = []
-                for future in tqdm_rich(
+                for future in tqdm(
                     as_completed(tasks), total=len(tasks), desc="Processing..."
                 ):
                     task_id = tasks[future]
@@ -87,7 +90,7 @@ class SpanLabeler:
         else:
             results = [
                 self.parse_sample(sample)
-                for sample in tqdm_rich(data, desc="Processing...")
+                for sample in tqdm(data, desc="Processing...")
             ]
         return results
 
@@ -226,7 +229,7 @@ def parse_args():
         default="musique",
     )
     parser.add_argument("--split", type=str, default="demo")
-    parser.add_argument("--model", choices=["gpt35", "gpt4", "llama"], default="llama")
+    parser.add_argument("--model", choices=["gpt35", "gpt4", "llama", "deepseek"], default="llama")
     parser.add_argument("--workers", type=int, default=10, help="parallel processors")
     parser.add_argument("--starting", type=int, default=0)
     parser.add_argument("--ending", type=int, default=None)
@@ -237,9 +240,10 @@ def parse_args():
 def main(opts: argparse.Namespace):
     model = MODEL_DICT[opts.model]
     span_labeler = SpanLabeler(model, opts.dataset, opts.split)
-    save_path = os.path.join(
-        SYNTHESIZED_SPAN_LABELING_DATA_PATH, opts.dataset, f"{opts.split}.jsonl"
-    )
+    output_dir = os.path.join(SYNTHESIZED_SPAN_LABELING_DATA_PATH, opts.dataset)
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = os.path.join(output_dir, f"{opts.split}.jsonl")
+    logger.info(f"Saving span labeling data to: {save_path}")
     with open(save_path, "w+", encoding="utf-8") as f:
         for labeled in span_labeler.parse(workers=opts.workers):
             info = json.dumps(labeled, ensure_ascii=False)

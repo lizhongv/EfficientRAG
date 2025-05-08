@@ -4,26 +4,34 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterator
+# from tqdm.rich import tqdm_rich
+from tqdm import tqdm
+from datetime import datetime
 
-from tqdm.rich import tqdm_rich
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    print(f"project dir: {pro_dir}")
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from prompts import (
-    TOKEN_LABEL_REDUNDANT_EVALUATION_PROMPT,
-    TOKEN_LABEL_REDUNDANT_SYSTEM_MSG,
-    TOKEN_LABEL_SYNTHESIZE_FEW_SHOT_PROMPT_MUSIQUE,
-    TOKEN_LABEL_SYNTHESIZE_FEW_SHOT_PROMPT_WIKIMQA,
-    TOKEN_LABELING_SYSTEM_MSG,
-)
+    from src.data_synthesize.prompts import (
+        TOKEN_LABEL_REDUNDANT_EVALUATION_PROMPT,
+        TOKEN_LABEL_REDUNDANT_SYSTEM_MSG,
+        TOKEN_LABEL_SYNTHESIZE_FEW_SHOT_PROMPT_MUSIQUE,
+        TOKEN_LABEL_SYNTHESIZE_FEW_SHOT_PROMPT_WIKIMQA,
+        TOKEN_LABELING_SYSTEM_MSG,
+    )
 
-from conf import (
-    MODEL_DICT,
-    SYNTHESIZED_DECOMPOSED_DATA_PATH,
-    SYNTHESIZED_TOKEN_LABELING_DATA_PATH,
-)
-from language_models import LanguageModel, get_model
-from utils import ask_model, ask_model_in_parallel, load_jsonl
-from utils.model import get_type_parser
+    from src.conf import (
+        MODEL_DICT,
+        SYNTHESIZED_DECOMPOSED_DATA_PATH,
+        SYNTHESIZED_TOKEN_LABELING_DATA_PATH,
+    )
+    from src.language_models import LanguageModel, get_model
+    from src.utils import ask_model, ask_model_in_parallel, load_jsonl
+    from src.utils.model import get_type_parser
+    from src.log import logger
 
 TOKEN_LABEL_PROMPT_TEMPLATE_MAPPING = {
     "musique": TOKEN_LABEL_SYNTHESIZE_FEW_SHOT_PROMPT_MUSIQUE,
@@ -36,38 +44,58 @@ class TokenLabeler:
     def __init__(self, model: str, dataset: str, split: str) -> None:
         self.model: LanguageModel
         self.model = get_model(model)
-
         labeled_data_path = os.path.join(
-            SYNTHESIZED_DECOMPOSED_DATA_PATH, dataset, f"{split}.jsonl"
+            SYNTHESIZED_DECOMPOSED_DATA_PATH,
+            dataset, f"{split}.jsonl"
         )
+        logger.info(f"Loading labeled data from: {labeled_data_path}")
         self.labeled_data = load_jsonl(labeled_data_path)
-        self.check_if_valid = lambda x: all(
+        self.validator = lambda x: all(
             [k in x.keys() for k in ["extracted_words"]]
         )
         self.token_labeling_prompt = TOKEN_LABEL_PROMPT_TEMPLATE_MAPPING[dataset]
 
     def parse(self, starting: int = 0, workers=10) -> list[dict]:
         labeled_data = self.labeled_data[starting:]
-        prompts = []
+        labeled_data = [d for d in labeled_data if d.get(
+            "state", None) is None]
 
-        labeled_data = [d for d in labeled_data if d.get("state", None) is None]
+        current_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        temp_file_path = f"temp_token_labeling_{current_time}.json"
         results = []
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            tasks = {
-                executor.submit(self.parse_sample, sample): idx
-                for idx, sample in enumerate(labeled_data)
-            }
-            for task in tqdm_rich(
-                as_completed(tasks), total=len(tasks), desc="Processing..."
-            ):
-                idx = tasks[task]
-                try:
-                    result = task.result()
-                finally:
-                    ...
-                results.append((result, idx))
-        results = [r[0] for r in sorted(results, key=lambda x: x[1])]
-        return results
+        if workers > 1:
+            with ThreadPoolExecutor(max_workers=workers) as executor, \
+                    open(temp_file_path, "w+", encoding="utf-8") as temp_f:
+                tasks = {
+                    executor.submit(self.parse_sample, sample): idx
+                    for idx, sample in enumerate(labeled_data)
+                }
+                for task in tqdm(as_completed(tasks), total=len(tasks), desc="Processing..."):
+                    idx = tasks[task]
+                    try:
+                        result = task.result()
+                    except Exception as e:
+                        result = {"state": "failed"}
+                        logger.error(f"Error processing sample {idx}: {e}")
+                        continue
+
+                    temp_f.write(json.dumps(
+                        (result, idx), ensure_ascii=False) + "\n")
+                    temp_f.flush()
+                temp_f.seek(0)
+                for line in temp_f:
+                    try:
+                        results.append(json.loads(line.strip()))
+                    except json.JSONDecodeError as e:
+                        logger.error(
+                            f"Error decoding JSON from line: {line}. Error: {e}")
+            return [r[0] for r in sorted(results, key=lambda x: x[1])]
+        else:
+            results = [
+                self.parse_sample(sample)
+                for sample in tqdm(labeled_data, desc="Processing...")
+            ]
+            return results
 
     def parse_sample(self, sample: dict) -> dict:
         prompt_list = self.parse_prompt(sample)
@@ -77,11 +105,13 @@ class TokenLabeler:
                 self.model,
                 prompt,
                 TOKEN_LABELING_SYSTEM_MSG,
-                type="json",
-                check_if_valid=self.check_if_valid,
+                response_type="json",
+                validator=self.validator,
             )
             if result is None:
+                logger.error(f"Result is None")
                 result = {"extracted_words": "", "status": "error"}
+
             results.append(result)
         for subq_id, result in zip(
             sorted(sample["decomposed_questions"].keys()), results
@@ -109,12 +139,13 @@ class TokenLabeler:
         for sample in token_labeled_data:
             for sub_question_id in sorted(sample["decomposed_questions"].keys()):
                 if (
-                    sample["decomposed_questions"][sub_question_id].get("state", None)
+                    sample["decomposed_questions"][sub_question_id].get(
+                        "state", None)
                     == "error"
                 ):
                     failed_question_ids.add(sample["id"])
                     break
-        progress = tqdm_rich(
+        progress = tqdm(
             desc="Processing failed...", total=len(failed_question_ids)
         )
         for sample in token_labeled_data:
@@ -123,14 +154,15 @@ class TokenLabeler:
                 continue
             for sub_question_id in sorted(sample["decomposed_questions"].keys()):
                 if (
-                    sample["decomposed_questions"][sub_question_id].get("state", None)
+                    sample["decomposed_questions"][sub_question_id].get(
+                        "state", None)
                     != "error"
                 ):
                     continue
                 prompt_list = self.parse_prompt(sample)
                 prompt = prompt_list[int(sub_question_id) - 1]
                 result = ask_model(
-                    self.model, prompt, type="json", check_if_valid=self.check_if_valid
+                    self.model, prompt, type="json", validator=self.validator
                 )
                 if result is None:
                     continue
@@ -153,7 +185,7 @@ class TokenReLabeler:
             SYNTHESIZED_TOKEN_LABELING_DATA_PATH, dataset, f"{split}.jsonl"
         )
         self.labeled_data = load_jsonl(labeled_data_path)
-        self.check_if_valid = lambda x: all(
+        self.validator = lambda x: all(
             [k in x.keys() for k in ["extracted_words"]]
         )
         self.check_redundant_valid = lambda x: type(x) == dict and all(
@@ -168,7 +200,7 @@ class TokenReLabeler:
                 executor.submit(self.check_sample_redundant, sample): idx
                 for idx, sample in enumerate(labeled_data)
             }
-            for future in tqdm_rich(
+            for future in tqdm(
                 as_completed(tasks), total=len(tasks), desc="Redundant"
             ):
                 task_id = tasks[future]
@@ -236,7 +268,8 @@ class TokenReLabeler:
                     chunk["extracted_words"] = json_result["extracted_words"]
                     chunk["redundant"] = False
                 except json.JSONDecodeError:
-                    print(f"Error on {prompt['id']} sub-question {prompt['subq_id']}")
+                    print(
+                        f"Error on {prompt['id']} sub-question {prompt['subq_id']}")
                     json_result = None
 
         return labeled_data
@@ -274,7 +307,7 @@ class TokenReLabeler:
                 evaluation_prompt,
                 TOKEN_LABEL_REDUNDANT_SYSTEM_MSG,
                 type="json",
-                check_if_valid=self.check_redundant_valid,
+                validator=self.check_redundant_valid,
             )
             if evaluation["redundant"] or evaluation["missing"]:
                 redundant["redundant"].append(subq_id)
@@ -287,16 +320,18 @@ def parse_args():
         "--dataset",
         type=str,
         default="musique",
+        choices=["musique", "2WikiMQA"]
     )
     parser.add_argument("--split", type=str, default="valid")
-    parser.add_argument("--model", default="gpt4")
+    parser.add_argument("--model", default="gpt-4o", choices=MODEL_DICT.keys())
     parser.add_argument(
         "--workers", type=int, default=10, help="Number of parallel processors"
     )
     parser.add_argument(
         "--sync", action="store_true", help="Syncing with label fixed data"
     )
-    parser.add_argument("--failed", action="store_true", help="Parse failed data")
+    parser.add_argument("--failed", action="store_true",
+                        help="Parse failed data")
     parser.add_argument("--failed_path", type=str, help="Path to failed data")
     parser.add_argument(
         "--relabel", action="store_true", help="Re-label extracted words"
@@ -306,20 +341,18 @@ def parse_args():
 
 
 def main(opt: argparse.Namespace):
-    model = MODEL_DICT[opt.model]
-    labeler = TokenLabeler(model, opt.dataset, opt.split)
-    with open(
-        os.path.join(
-            SYNTHESIZED_TOKEN_LABELING_DATA_PATH,
-            opt.dataset,
-            f"{opt.split}.jsonl",
-        ),
-        "w+",
-        encoding="utf-8",
-    ) as f:
+    labeler = TokenLabeler(opt.model, opt.dataset, opt.split)
+    save_path = os.path.join(
+        SYNTHESIZED_TOKEN_LABELING_DATA_PATH, opt.dataset, f"{opt.split}.jsonl"
+    )
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    logger.info(f"Saving labeled data to {save_path}")
+
+    with open(save_path, "w+", encoding="utf-8",) as f:
         for labeled in labeler.parse(workers=opt.workers):
             info = json.dumps(labeled, ensure_ascii=False)
             f.write(info + "\n")
+    logger.info(f"Done!")
 
 
 if __name__ == "__main__":

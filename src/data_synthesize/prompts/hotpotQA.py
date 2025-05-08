@@ -51,7 +51,22 @@ HotpotQAPromptComparison = """You are assigned a multi-hop question decompositio
 3. The sub-questions must not rely on any other document or other sub-question.
 
 Your output should be in the following JSON format:
-
+{
+    "question": "{multi_hop_question}",
+    "decomposed_questions": {
+        "1": {
+            "sub_question": "{sub_question_1}",
+            "answer": "{answer_1}",
+            "dependency": []
+        },
+        "2": {
+            "sub_question": "{sub_question_2}",
+            "answer": "{answer_2}",
+            "dependency": []
+        },
+        ...
+    }
+}
 1. The "question" key should contain the original multi-hop question.
 2. The "decomposed_questions" key should contain a dictionary where each key is the sub-question number (e.g., "1", "2", ...) and each value is another dictionary with:
    - "sub_question": The decomposed single-hop sub-question derived from the corresponding document. This question should only rely on the information contained in the specific supporting document assigned to it.
@@ -78,7 +93,7 @@ Your output should be in the following JSON format:
 Please output only the JSON object in the specified format, without any additional explanations or text."""
 
 
-HotpotQAPromptCompose="""You are assigned a multi-hop question decomposition task. Your mission is to decompose a multi-hop question into a list of single-hop sub-questions based on the supporting documents, such that:
+HotpotQAPromptCompose = """You are assigned a multi-hop question decomposition task. Your mission is to decompose a multi-hop question into a list of single-hop sub-questions based on the supporting documents, such that:
 
 1. The number of sub-questions matches the number of supporting documents.
 2. Each sub-question must be answered independently based on its respective supporting document, but some sub-questions may depend on the answers to previous sub-questions.

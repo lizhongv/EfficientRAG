@@ -2,21 +2,25 @@ import argparse
 import json
 import os
 import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterator
-
 from tqdm.rich import tqdm_rich
 
-from conf import (
-    CORPUS_DATA_PATH,
-    SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH,
-    SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH,
-)
-from retrievers import Retriever
-from retrievers.embeddings import ModelCheckpointMapping, ModelTypes
-from utils import load_jsonl
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    print(f"project dir: {pro_dir}")
+
+    from src.conf import (
+        CORPUS_DATA_PATH,
+        SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH,
+        SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH,
+    )
+    from src.retrievers import Retriever
+    from src.retrievers.embeddings import ModelCheckpointMapping, ModelTypes
+    from src.utils import load_jsonl
+    from src.log import logger
 
 
 def negative_sampling(retriever: Retriever, samples: list[dict]) -> Iterator[dict]:
@@ -66,6 +70,7 @@ def parse_args():
 
 def main(opts: argparse.Namespace):
     passage_path = os.path.join(CORPUS_DATA_PATH, opts.dataset, "corpus.jsonl")
+
     if opts.retriever == "e5-base-v2":
         embedding_path = os.path.join(CORPUS_DATA_PATH, opts.dataset, "e5-base")
     elif opts.retriever == "contriever":
@@ -80,13 +85,21 @@ def main(opts: argparse.Namespace):
         model_type=opts.retriever,
         model_path=ModelCheckpointMapping[opts.retriever],
     )
+
     subq_data_path = os.path.join(SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH, opts.dataset, f"{opts.split}.jsonl")
+    logger.info(f"Loading data from: {subq_data_path}")
     samples = load_jsonl(subq_data_path)
-    output_data_path = os.path.join(SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH, opts.dataset, f"{opts.split}.jsonl")
-    with open(output_data_path, "w+", encoding="utf-8") as f:
+
+    save_path = os.path.join(SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH, opts.dataset, f"{opts.split}.jsonl")
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    logger.info(f"Writing data to: {save_path}")
+
+    with open(save_path, "w+", encoding="utf-8") as f:
         for sample in negative_sampling(retriever, samples):
             d = json.dumps(sample, ensure_ascii=False)
             f.write(d + "\n")
+
+    logger.info(f"Done!")
 
 
 if __name__ == "__main__":

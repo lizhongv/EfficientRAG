@@ -1,0 +1,38 @@
+DebertaV2Model(
+  (embeddings): DebertaV2Embeddings(
+    (word_embeddings): Embedding(128100, 1024, padding_idx=0)
+    (LayerNorm): LayerNorm((1024,), eps=1e-07, elementwise_affine=True)
+    (dropout): StableDropout()
+  )
+  (encoder): DebertaV2Encoder(
+    (layer): ModuleList(
+      (0-23): 24 x DebertaV2Layer(
+        (attention): DebertaV2Attention(
+          (self): DisentangledSelfAttention(
+            (query_proj): Linear(in_features=1024, out_features=1024, bias=True)
+            (key_proj): Linear(in_features=1024, out_features=1024, bias=True)
+            (value_proj): Linear(in_features=1024, out_features=1024, bias=True)
+            (pos_dropout): StableDropout()
+            (dropout): StableDropout()
+          )
+          (output): DebertaV2SelfOutput(
+            (dense): Linear(in_features=1024, out_features=1024, bias=True)
+            (LayerNorm): LayerNorm((1024,), eps=1e-07, elementwise_affine=True)
+            (dropout): StableDropout()
+          )
+        )
+        (intermediate): DebertaV2Intermediate(
+          (dense): Linear(in_features=1024, out_features=4096, bias=True)
+          (intermediate_act_fn): GELUActivation()
+        )
+        (output): DebertaV2Output(
+          (dense): Linear(in_features=4096, out_features=1024, bias=True)
+          (LayerNorm): LayerNorm((1024,), eps=1e-07, elementwise_affine=True)
+          (dropout): StableDropout()
+        )
+      )
+    )
+    (rel_embeddings): Embedding(512, 1024)
+    (LayerNorm): LayerNorm((1024,), eps=1e-07, elementwise_affine=True)
+  )
+)

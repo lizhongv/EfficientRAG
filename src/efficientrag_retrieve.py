@@ -5,7 +5,7 @@ import sys
 from typing import Iterator
 
 import spacy
-from tqdm.rich import tqdm_rich
+from tqdm import tqdm
 from transformers import (
     DebertaV2ForTokenClassification,
     DebertaV2Tokenizer,
@@ -13,25 +13,30 @@ from transformers import (
     PreTrainedTokenizer,
 )
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    from src.efficient_rag.model import DebertaForSequenceTokenClassification
+    from src.data_module.format import build_query_info_sentence
+    from src.utils import load_jsonl, write_jsonl
+    from src.retrievers import Retriever
+    from src.conf import (
+        CLS_TOKEN,
+        CONTINUE_TAG,
+        CORPUS_DATA_PATH,
+        FINISH_TAG,
+        MODEL_PATH,
+        RETRIEVE_RESULT_PATH,
+        SEP_TOKEN,
+        SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH,
+        TAG_MAPPING_REV,
+        TAG_MAPPING_TWO_REV,
+        TERMINATE_TAG,
+    )
+    from src.log.logging_config import logger, LBLUE, LGREEN, LRED, RESET
+    logger.info(f"pro_dir: {pro_dir}")
 
-from conf import (
-    CLS_TOKEN,
-    CONTINUE_TAG,
-    CORPUS_DATA_PATH,
-    FINISH_TAG,
-    MODEL_PATH,
-    RETRIEVE_RESULT_PATH,
-    SEP_TOKEN,
-    SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH,
-    TAG_MAPPING_REV,
-    TAG_MAPPING_TWO_REV,
-    TERMINATE_TAG,
-)
-from data_module.format import build_query_info_sentence
-from efficient_rag.model import DebertaForSequenceTokenClassification
-from retrievers import Retriever
-from utils import load_jsonl, write_jsonl
 
 MAX_ITER = 4
 LABELER_MAX_LENGTH = 384
@@ -182,8 +187,8 @@ def efficient_rag(
     top_k: int = 10,
 ) -> Iterator[dict]:
     nlp = spacy.load("en_core_web_sm")
-    for sample in tqdm_rich(dataset):
-    # for sample in dataset:
+    for sample in tqdm(dataset):
+        # for sample in dataset:
         iter = 0
         filter_input = ""
         query = sample["question"]

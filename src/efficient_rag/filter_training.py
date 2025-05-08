@@ -15,11 +15,12 @@ import sys
 import logging
 
 if True:
-    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    from utils import load_jsonl
-    from efficient_rag.data import FilterDataset
-    from conf import EFFICIENT_RAG_FILTER_TRAINING_DATA_PATH, MODEL_PATH
+    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    from src.utils import load_jsonl
+    from src.efficient_rag.data import FilterDataset
+    from src.conf import EFFICIENT_RAG_FILTER_TRAINING_DATA_PATH, MODEL_PATH
 
 # os.environ["WANDB_PROJECT"] = "EfficientRAG_filter"
 

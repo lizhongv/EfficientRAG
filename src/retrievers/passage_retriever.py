@@ -4,16 +4,18 @@ import sys
 from glob import glob
 from typing import List, Union
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from retrievers.embeddings import (
-    Embedder,
-    EmbeddingModelTypes,
-    ModelCheckpointMapping,
-    ModelTypes,
-)
-from retrievers.utils.utils import load_passages
-from retrievers.vector_index import FaissIndex
-from retrievers.vector_index.faiss_index import IndexType
+if True:
+    from src.retrievers.embeddings import (
+        Embedder,
+        EmbeddingModelTypes,
+        ModelCheckpointMapping,
+        ModelTypes,
+    )
+    from src.retrievers.utils.utils import load_passages
+    from src.retrievers.vector_index import FaissIndex
+    from src.retrievers.vector_index.faiss_index import IndexType
+    from log.logging_config import logger, LBLUE, LGREEN, LRED, RESET
+
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 

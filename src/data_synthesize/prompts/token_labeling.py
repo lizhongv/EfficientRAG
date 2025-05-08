@@ -100,7 +100,7 @@ Now it's your turn!
 
 TOKEN_LABEL_SYNTHESIZE_FEW_SHOT_PROMPT_WIKIMQA = """
 You have been assigned an information extraction task.
-Your mission is to extract the words from a given paragraph so that others(GPT3.5) can answer a question using only your extracted words.
+Your mission is to extract the words from a given paragraph so that others(GPT4) can answer a question using only your extracted words.
 Your extracted words should cover information from both the question and the answer, including entities (e.g. people, location, film) and core relations.
 Your response should be in JSON format and include the following key:
 - "extracted_words": a string composed of a list of words extracted from the paragraph, separated by a space.
@@ -113,15 +113,15 @@ Please adhere to the following guidelines:
 - Extract as few words as possible.
 
 Question: Who is the director of film Polish-Russian War (Film)?
-Paragraph: Polish-Russian War (film): Polish-Russian War (Wojna polsko-ruska) is a 2009 Polish film directed by Xawery \u017bu\u0142awski based on the novel Polish-Russian War under the white-red flag by Dorota Mas\u0142owska.
-Answer: Xawery \u017bu\u0142awski
+Paragraph: Polish-Russian War (film): Polish-Russian War (Wojna polsko-ruska) is a 2009 Polish film directed by Xawery Żuławski based on the novel Polish-Russian War under the white-red flag by Dorota Masłowska.
+Answer: Xawery Żuławski
 Your response:
 ```json
-{{"extracted_words": "Alas Southeast Aceh Regency Aceh Indonesia"}}
+{{"extracted_words": "Polish-Russian War Xawery Żuławski"}}
 ```
 
 Question: When did Elio Petri die?
-Paragraph: Elio Petri: Elio Petri( 29 January 1929 \u2013 10 November 1982) was an Italian political filmmaker best known for the 1970 Academy Award- winning film\" Investigation of a Citizen Above Suspicion\".
+Paragraph: Elio Petri: Elio Petri(29 January 1929 - 10 November 1982) was an Italian political filmmaker best known for the 1970 Academy Award- winning film\" Investigation of a Citizen Above Suspicion\".
 Answer: 10 November 1982
 Your response:
 ```json

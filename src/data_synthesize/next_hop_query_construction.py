@@ -1,22 +1,29 @@
+from tqdm.rich import tqdm_rich
 import argparse
 import json
 import os
 import sys
 from typing import Optional
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from prompts.query_labeling import *
+from tqdm import tqdm
 from tqdm.rich import tqdm_rich
+from datetime import datetime
 
-from conf import (
-    MODEL_DICT,
-    SYNTHESIZED_NEXT_QUERY_DATA_PATH,
-    SYNTHESIZED_TOKEN_EXTRACTED_DATA_PATH,
-)
-from language_models import LanguageModel, get_model
-from utils import ask_model, load_jsonl
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    print(f"project dir: {pro_dir}")
+
+    from src.data_synthesize.prompts.query_labeling import *
+    from src.conf import (
+        MODEL_DICT,
+        SYNTHESIZED_NEXT_QUERY_DATA_PATH,
+        SYNTHESIZED_TOKEN_EXTRACTED_DATA_PATH,
+    )
+    from src.language_models import LanguageModel, get_model
+    from src.utils import ask_model, load_jsonl
+    from src.log import logger
 
 
 class NextQueryFilter:
@@ -28,6 +35,7 @@ class NextQueryFilter:
         tagged_data_path = os.path.join(
             SYNTHESIZED_TOKEN_EXTRACTED_DATA_PATH, dataset, f"{split}.jsonl"
         )
+        logger.info(f"Load data from: {tagged_data_path}")
         self.tagged_data = load_jsonl(tagged_data_path)
         self.check_if_valid = lambda x: all([k in x.keys() for k in ["filtered_query"]])
 
@@ -37,31 +45,45 @@ class NextQueryFilter:
         hierarchy: list[str] = None,
     ):
         labeled_data = [
-            d
-            for d in self.tagged_data
+            d for d in self.tagged_data
             if all(
                 d["decomposed_questions"][sub_id].get("state", None) is None
                 for sub_id in d["decomposed_questions"].keys()
             )
         ]
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            tasks = {
-                executor.submit(self.parse_sample, sample, hierarchy): idx
-                for idx, sample in enumerate(labeled_data)
-            }
-            results = []
-            for future in tqdm_rich(
-                as_completed(tasks), total=len(tasks), desc="Processing..."
-            ):
-                task_id = tasks[future]
-                try:
-                    result = future.result()
-                    results.append((task_id, result))
-                except Exception as e:
-                    print(f"Failed at sample {task_id}: {e}")
-        results = [result[1] for result in sorted(results, key=lambda x: x[0])]
-        return results
+        current_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        temp_file_path = f"temp_next_hop_query_construction_{current_time}.json"
+        results = []
+        if workers > 1:
+            with ThreadPoolExecutor(max_workers=workers) as executor, \
+                    open(temp_file_path, "w+", encoding="utf-8") as temp_f:
+                tasks = {
+                    executor.submit(self.parse_sample, sample, hierarchy): idx
+                    for idx, sample in enumerate(labeled_data)
+                }
+                for future in tqdm_rich(as_completed(tasks), total=len(tasks), desc="Processing..."):
+                    task_id = tasks[future]
+                    try:
+                        result = future.result()
+                        # results.append((task_id, result))
+                        temp_f.write(json.dumps((result, task_id), indent=4, ensure_ascii=False) + "\n")
+                        temp_f.flush()
+                    except Exception as e:
+                        print(f"Failed at sample {task_id}: {e}")
+                temp_f.seek(0)
+                for line in temp_f:
+                    try:
+                        results.append(json.loads(line.strip()))
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Error decoding JSON from line: {line}. Error: {e}")
+            return [result[1] for result in sorted(results, key=lambda x: x[0])]
+        else:
+            results = [
+                self.parse_sample(sample)
+                for sample in tqdm_rich(labeled_data, desc="Processing...")
+            ]
+            return results
 
     def parse_sample(
         self,
@@ -74,6 +96,8 @@ class NextQueryFilter:
             model = larger_model
         else:
             model = self.model
+
+        # TODO 子问题依赖为空的情况，直接使用原问题
         for subq_id, subq in sample["decomposed_questions"].items():
             if len(subq["dependency"]) == 0:
                 subq["filtered_query"] = sample["question"]
@@ -238,7 +262,7 @@ def parse_args():
         default="musique",
     )
     parser.add_argument("--split", type=str, default="valid")
-    parser.add_argument("--model", default="llama")
+    parser.add_argument("--model", default="llama", choices=MODEL_DICT.keys())
     parser.add_argument(
         "--workers", type=int, default=10, help="Number of parallel processors"
     )
@@ -248,15 +272,16 @@ def parse_args():
 
 def main(opt: argparse.Namespace):
     filter = NextQueryFilter(opt.model, opt.dataset, opt.split)
+    save_path = os.path.join(SYNTHESIZED_NEXT_QUERY_DATA_PATH, opt.dataset, f"{opt.split}.jsonl")
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    logger.info(f"Save data to: {save_path}")
 
-    output_path = os.path.join(
-        SYNTHESIZED_NEXT_QUERY_DATA_PATH, opt.dataset, f"{opt.split}.jsonl"
-    )
-    with open(output_path, "w+", encoding="utf-8") as f:
-        filtered_query_list = filter.parse(workers=opt.workers)
-        for filtered_sample in filtered_query_list:
+    with open(save_path, "w+", encoding="utf-8") as f:
+        for filtered_sample in tqdm_rich(filter.parse(workers=opt.workers), desc="Processing..."):
             info = json.dumps(filtered_sample, ensure_ascii=False)
             f.write(info + "\n")
+
+    logger.info(f"Done!")
 
 
 if __name__ == "__main__":

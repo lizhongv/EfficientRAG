@@ -74,25 +74,24 @@ python src/retrievers/passage_embedder.py \
 ```
 
 ## Data Construction
+
 1. Query Decompose
-   
 ```bash
 python src/data_synthesize/query_decompose.py \
     --dataset 2WikiMQA \
     --split train \
     --model deepseek \
     --workers 10 \
-    --ending  500
+    --ending  500 > data/deepseek/synthesized_decomposed/2WikiMQA/query_decompose.log 2>&1 &
 ```
 
 2. Token Labeling
-
 ```bash
 python src/data_synthesize/token_labeling.py \
     --dataset 2WikiMQA \
     --split train \
     --model deepseek \
-    --workers 10 
+    --workers 10 > data/deepseek/synthesized_token_labeling/2WikiMQA/token_labeling.log 2>&1 &
 ```
 
 3. Token Extraction
@@ -100,25 +99,27 @@ python src/data_synthesize/token_labeling.py \
 python src/data_synthesize/token_extraction.py \
     --data_path data/deepseek/synthesized_token_labeling/2WikiMQA/train.jsonl \
     --save_path data/deepseek/token_extracted/2WikiMQA/train.jsonl \
-    --verbose
+    --verbose > data/deepseek/token_extracted/2WikiMQA/token_extracted.log 2>&1 &
 ```
+
 4. Next Query construction
 ```bash
 python src/data_synthesize/next_hop_query_construction.py \
     --dataset 2WikiMQA \
     --split train \
-    --model deepseek
+    --model deepseek \
+    --workers 10 > data/deepseek/synthesized_next_query/2WikiMQA/next_query_construction.log 2>&1 &
 ```
 
 4. Next Query Filtering
 ```bash
 python src/data_synthesize/next_hop_query_filtering.py \
-    --data_path data/synthesized_next_query/2WikiMQA/train.jsonl \
-    --save_path data/next_query_extracted/2WikiMQA/train.jsonl \
-    --verbose
+    --data_path data/deepseek/synthesized_next_query/2WikiMQA/train.jsonl \
+    --save_path data/deepseek/next_query_extracted/2WikiMQA/train.jsonl \
+    --verbose > data/deepseek/next_query_extracted/2WikiMQA/next_query_extracted.log 2>&1 &
 ```
 
-Negative Sampling
+5. Negative Sampling
 ```bash
 python src/data_synthesize/negative_sampling.py \
     --dataset 2WikiMQA \
@@ -136,17 +137,42 @@ python src/data_synthesize/negative_token_extraction.py \
     --verbose
 ```
 
-
-
-retrieve
+6. 训练数据整合
+   
 ```bash
+python src/data_synthesize/training_data_synthesize.py \
+    --dataset 2WikiMQA \
+    --split train
+```
+
+
+## Inference
+
+```bash
+# 检索
 python src/efficientrag_retrieve.py \
-    --dataset hotpotQA \
+    --dataset  2WikiMQA  \
     --retriever contriever \
     --labels 2 \
-    --labeler_ckpt "/data0/lizhong/multi_hop_rag/EfficientRAG/saved_models/labeler_two/result/checkpoint-5584" \
-    --filter_ckpt "/data0/lizhong/multi_hop_rag/EfficientRAG/saved_models/filter/result/checkpoint-9076" \
+    --labeler_ckpt saved_models/labeler_two/result/checkpoint-5584 \
+    --filter_ckpt saved_models/filter/result/checkpoint-9076 \
     --topk 10 \
+
+# 生成
+python src/efficientrag_qa.py \
+    --fpath results/deepseek/retrieve/efficient_rag/2WikiMQA-.jsonl \
+    --model qwen2.5 \
+    --dataset  2WikiMQA \
+    --workers 10 
+```
+
+## Evaluate
+
+```bash
+python src/evaluation/correctness.py \
+    --fpath results/deepseek/retrieve/efficient_rag/2WikiMQA-_qa_results.jsonl \
+    --model  qwen2.5 \
+    --workers  10
 ```
 
 
@@ -162,54 +188,6 @@ DEEPSEEK_API_KEY = ""
 DASHSCOPE_API_KEY = ""
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-
-# 1. Query Decompose  
-python src/data_synthesize/query_decompose.py \
-    --dataset hotpotQA \
-    --split train \
-    --model gpt-4o \
-    --ending 10
-# musique, hotpotQA, 2WikiMQA
-
-# 2. Token Labeling
-python src/data_synthesize/token_labeling.py \
-    --dataset hotpotQA \
-    --split train \
-    --model llama3
-python src/data_synthesize/token_extraction.py \
-    --data_path data/synthesized_token_labeling/hotpotQA/train.jsonl \
-    --save_path data/token_extracted/hotpotQA/train.jsonl \
-    --verbose
-
-# 3. Next Query Filtering
-python src/data_synthesize/next_hop_query_construction.py \
-    --dataset hotpotQA \
-    --split train \
-    --model llama
-python src/data_synthesize/next_hop_query_filtering.py \
-    --data_path data/synthesized_next_query/hotpotQA/train.jsonl \
-    --save_path data/next_query_extracted/hotpotQA/train.jsonl \
-    --verbose
-
-# 4. Negative Sampling
-python src/data_synthesize/negative_sampling.py \
-    --dataset hotpotQA \
-    --split train \
-    --retriever contriever
-python src/data_synthesize/negative_sampling_labeled.py \
-    --dataset hotpotQA \
-    --split train \
-    --model llama
-python src/data_synthesize/negative_token_extraction.py \
-    --dataset hotpotQA \
-    --split train \
-    --verbose
-
-# 5 Training Data
-python src/data_synthesize/training_data_synthesize.py \
-    --dataset hotpotQA \
-    --split train
-```
 
 ## Training
 ```bash
@@ -245,254 +223,11 @@ os.environ["WANDB_PROJECT"] = "EfficientRAG_filter"
 TrainingArguments 设置 run_name
 ```
 
-## 数据合成
-```bash
-# Token Labeling Prompt  
 
-You have been assigned an information extraction task.  
-Your mission is to extract the words from a given paragraph so that others can answer a question using only your  extracted words.  
-Your extracted words should cover information from both the question and the answer, including entities (e.g. people,  location, film) and core relations.  
-Your response should be in JSON format and include the following key:  
-- "extracted_words": a string composed of a list of words extracted from the paragraph, separated by a space.  
-Please adhere to the following guidelines:  
-- Do not reorder, change, miss, or add words. Keep it the same as the original paragraph.  
-- Identify and extract ONLY the words explicitly mentioned in either the question or its answer, and strongly related to  the question or its answer.  
-- NEVER label any words that do not contribute meaningful information to the question or answer.  
-- Only extract words that occurred in the paragraph.
-```
-
-```bash
-# Query Filtering Prompt  
-
-You are assigned a multi-hop question refactoring task.  
-Given a complex question along with a set of related known information, you are required to refactor the question by  applying the principle of retraining difference and removing redundancies. Specifically, you should eliminate the content  that is duplicated between the question and the known information, leaving only the parts of the question that have  not been answered, and the new knowledge points in the known information. The ultimate goal is to reorganize these  retrained parts to form a new question.  
-You can only generate the question by picking words from the question and known information. You should first pick  up words from the question, and then from each known info, and concatenate them finally. You are not allowed to add,  change, or reorder words. The given known information starts with the word "Info: ".  
-You response should be in JSON format and include the following key:  
-- "filtered_query": a string representing the concatenation of the words from both the question and newly added  information, separated by a space.  Please adhere to the following guidelines:  
-- Do not reorder, change, or add words. Keep it the same as the original question.  
-- Identify and remove ONLY the words that are already known, keep the unknown information from both the question  and information.
-```
-
-filter 数据
-```json
-{
-    "query_info_tokens": [
-        "Query",
-        ":",
-        "What",
-        "government",
-        "position",
-        "was",
-        "held",
-        "by",
-        "the",
-        "woman",
-        "who",
-        "portrayed",
-        "Corliss",
-        "Archer",
-        "in",
-        "the",
-        "film",
-        "Kiss",
-        "and",
-        "Tell",
-        "?",
-        "Info",
-        ":",
-        "Shirley",
-        "Temple",
-        "Corliss",
-        "Archer"
-    ],
-    "query_info_labels": [
-        false,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        true,
-        true,
-        false,
-        false
-    ]
-}
-```
-
-labeler 数据
-
-```json
-{
-    "question": "What government position was held by the woman who portrayed Corliss Archer in the film Kiss and Tell?",
-    "chunk": "Kiss and Tell (1945 film): Kiss and Tell is a 1945 American comedy film starring then 17-year-old Shirley Temple as Corliss Archer.  In the film, two teenage girls cause their respective parents much concern when they start to become interested in boys.  The parents' bickering about which girl is the worse influence causes more problems than it solves.",
-    "matched": "Shirley Temple Corliss Archer",
-    "chunk_tokens": [
-        "Kiss",
-        "and",
-        "Tell",
-        "(",
-        "1945",
-        "film",
-        "):",
-        "Kiss",
-        "and",
-        "Tell",
-        "is",
-        "a",
-        "1945",
-        "American",
-        "comedy",
-        "film",
-        "starring",
-        "then",
-        "17",
-        "-",
-        "year",
-        "-",
-        "old",
-        "Shirley",
-        "Temple",
-        "as",
-        "Corliss",
-        "Archer",
-        ".",
-        " ",
-        "In",
-        "the",
-        "film",
-        "two",
-        "teenage",
-        "girls",
-        "cause",
-        "their",
-        "respective",
-        "parents",
-        "much",
-        "concern",
-        "when",
-        "they",
-        "start",
-        "to",
-        "become",
-        "interested",
-        "in",
-        "boys",
-        ".",
-        " ",
-        "The",
-        "parents",
-        "'",
-        "bickering",
-        "about",
-        "which",
-        "girl",
-        "is",
-        "the",
-        "worse",
-        "influence",
-        "causes",
-        "more",
-        "problems",
-        "than",
-        "it",
-        "solves",
-        "."
-    ],
-    "labels": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        true,
-        true,
-        false,
-        true,
-        true,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false
-    ],
-    "tag": "<CONTINUE>"
-}
-```
 
 ## 相关参考
 
 1. [三个多跳数据集说明](https://jibinquan.github.io/posts/%E4%B8%89%E5%A4%A7%E5%A4%9A%E8%B7%B3qa%E6%95%B0%E6%8D%AE%E9%9B%86/#musique%E9%80%9A%E8%BF%87%E5%8D%95%E8%B7%B3%E9%97%AE%E9%A2%98%E7%BB%84%E5%90%88%E6%9E%84%E5%BB%BA%E7%9A%84%E5%A4%9A%E8%B7%B3%E9%97%AE%E9%A2%98)
-2. https://github.com/microsoft/EfficientRAG
+2. [原始代码库](https://github.com/microsoft/EfficientRAG)
+3. [Json格式化](https://www.jyshare.com/front-end/53/)
+   

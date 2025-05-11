@@ -4,6 +4,7 @@ import sys
 
 import spacy
 from tqdm.rich import tqdm_rich
+from tqdm import tqdm 
 
 if True:
     pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

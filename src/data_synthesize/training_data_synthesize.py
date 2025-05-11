@@ -2,18 +2,27 @@ import argparse
 import os
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from tqdm.rich import tqdm_rich
 
-from conf import (
-    CONTINUE_TAG,
-    EFFICIENT_RAG_FILTER_TRAINING_DATA_PATH,
-    EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH,
-    FINISH_TAG,
-    SYNTHESIZED_NEGATIVE_SAMPLING_EXTRACTED_DATA_PATH,
-    TERMINATE_TAG,
-)
-from utils import load_jsonl, write_jsonl
+if True:
+    pro_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    print(f"project dir: {pro_dir}")
+
+    from tqdm.rich import tqdm_rich
+    from tqdm import tqdm
+
+    from src.conf import (
+        CONTINUE_TAG,
+        EFFICIENT_RAG_FILTER_TRAINING_DATA_PATH,
+        EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH,
+        FINISH_TAG,
+        SYNTHESIZED_NEGATIVE_SAMPLING_EXTRACTED_DATA_PATH,
+        TERMINATE_TAG,
+    )
+    from src.utils import load_jsonl, write_jsonl
+    from src.log import logger
 
 INFO_TEMPLATE = "Info: {info}"
 QUERY_TEMPLATE = "Q: {query}"
@@ -21,7 +30,7 @@ QUERY_TEMPLATE = "Q: {query}"
 
 def build_labeler_data(samples: list[dict]):
     results = []
-    for sample in tqdm_rich(samples, desc="Building labeler data"):
+    for sample in tqdm(samples, desc="Building labeler data"):
         for subq_id, subq in sample["decomposed_questions"].items():
             try:
                 if subq_id == sorted(sample["decomposed_questions"].keys())[-1]:
@@ -53,7 +62,7 @@ def build_labeler_data(samples: list[dict]):
 
 def build_filter_data(samples: list[dict]):
     results = []
-    for sample in tqdm_rich(samples, desc="Building filter data"):
+    for sample in tqdm(samples, desc="Building filter data"):
         for subq_id, subq in sample["decomposed_questions"].items():
             if "query_info_tokens" not in subq.keys():
                 continue
@@ -84,19 +93,24 @@ def main(opt: argparse.Namespace):
         opt.dataset,
         f"{opt.split}.jsonl",
     )
+    logger.info(f"Load data from: {data_path}")
     data = load_jsonl(data_path)
 
     labeler_data_path = os.path.join(
         EFFICIENT_RAG_LABELER_TRAINING_DATA_PATH, opt.dataset, f"{opt.split}.jsonl"
     )
     labeler_training_data = build_labeler_data(data)
+    os.makedirs(os.path.dirname(labeler_data_path), exist_ok=True)
     write_jsonl(labeler_training_data, labeler_data_path)
+    logger.info(f"labeler data saved to: {labeler_data_path}")
 
     filter_data_path = os.path.join(
         EFFICIENT_RAG_FILTER_TRAINING_DATA_PATH, opt.dataset, f"{opt.split}.jsonl"
     )
     filter_training_data = build_filter_data(data)
+    os.makedirs(os.path.dirname(filter_data_path), exist_ok=True)
     write_jsonl(filter_training_data, filter_data_path)
+    logger.info(f"filter data saved to: {filter_data_path}")
 
 
 if __name__ == "__main__":

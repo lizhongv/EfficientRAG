@@ -3,10 +3,11 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm.rich import tqdm_rich
+from tqdm import tqdm
 
 if True:
-    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    pro_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
     sys.path.append(pro_dir)
     os.chdir(pro_dir)
     print(f"project dir: {pro_dir}")
@@ -20,7 +21,8 @@ if True:
         SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH,
         SYNTHESIZED_NEGATIVE_SAMPLING_LABELED_DATA_PATH,
     )
-    from src.language_models import AOAI
+    # from src.language_models import AOAI
+    from src.language_models import LanguageModel, get_model
     from src.utils import ask_model, load_jsonl
     from src.log import logger
 
@@ -28,10 +30,15 @@ if True:
 class NegativeTokenLabeler:
     def __init__(self, model: str, dataset: str, split: str) -> None:
         # self.model = AOAI(model)
-        negative_sampling_data = os.path.join(SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH, dataset, f"{split}.jsonl")
-        logger.info(f"Loading negative sampling data from {negative_sampling_data}")
+        self.model: LanguageModel
+        self.model = get_model(model)
+        negative_sampling_data = os.path.join(
+            SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH, dataset, f"{split}.jsonl")
+        logger.info(
+            f"Loading negative sampling data from {negative_sampling_data}")
         self.negative_sampling_data = load_jsonl(negative_sampling_data)
-        self.check_if_valid = lambda x: all([k in x.keys() for k in ["extracted_words"]])
+        self.check_if_valid = lambda x: all(
+            [k in x.keys() for k in ["extracted_words"]])
 
     def parse(self, starting: int = 0, ending: int = None, workers=10) -> list[dict]:
         if ending is None:
@@ -39,9 +46,10 @@ class NegativeTokenLabeler:
         labeled_data = self.negative_sampling_data[starting:ending]
         if workers > 1:
             with ThreadPoolExecutor(max_workers=workers) as executor:
-                tasks = {executor.submit(self.parse_sample, sample): idx for idx, sample in enumerate(labeled_data)}
+                tasks = {executor.submit(
+                    self.parse_sample, sample): idx for idx, sample in enumerate(labeled_data)}
                 results = []
-                for future in tqdm_rich(as_completed(tasks), total=len(tasks), desc="Processing..."):
+                for future in tqdm(as_completed(tasks), total=len(tasks), desc="Processing..."):
                     task_id = tasks[future]
                     try:
                         result = future.result()
@@ -51,7 +59,7 @@ class NegativeTokenLabeler:
             results = [r[1] for r in sorted(results, key=lambda x: x[0])]
         else:
             results = []
-            for idx, sample in tqdm_rich(enumerate(labeled_data), total=len(labeled_data), desc="Processing..."):
+            for idx, sample in tqdm(enumerate(labeled_data), total=len(labeled_data), desc="Processing..."):
                 result = self.parse_sample(sample)
                 results.append(result)
         return results
@@ -61,7 +69,8 @@ class NegativeTokenLabeler:
             # prompt = NEGATIVE_TOKEN_LABEL_SYNTHESIZE_FEW_SHOT_PROMPT.format(
             #     question=subq["sub_question"], paragraph=subq["negative_paragraph"]
             # )
-            # result = ask_model( self.model, prompt, TOKEN_LABELING_SYSTEM_MSG, type="json", check_if_valid=self.check_if_valid,)
+            # result = ask_model(self.model, prompt, TOKEN_LABELING_SYSTEM_MSG,
+            #                    response_type="json", validator=self.check_if_valid,)
             result = {"extracted_words": ""}
             # if result is None:
             #     sample["decomposed_questions"][subq_id]["state"] = "error"
@@ -86,8 +95,7 @@ def parse_args():
 
 
 def main(opt: argparse.Namespace):
-    model = MODEL_DICT[opt.model]
-    labeler = NegativeTokenLabeler(model, opt.dataset, opt.split)
+    labeler = NegativeTokenLabeler(opt.model, opt.dataset, opt.split)
     output_dir = os.path.join(
         SYNTHESIZED_NEGATIVE_SAMPLING_LABELED_DATA_PATH,
         opt.dataset
@@ -96,7 +104,7 @@ def main(opt: argparse.Namespace):
     save_path = os.path.join(output_dir, f"{opt.split}.jsonl")
     logger.info(f"Saving labeled data to {save_path}")
     with open(save_path, "w",) as f:
-        for sample in labeler.parse():
+        for sample in labeler.parse(workers=opt.workers,):
             f.write(json.dumps(sample) + "\n")
     logger.info(f"Done!")
 

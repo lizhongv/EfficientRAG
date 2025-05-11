@@ -18,5 +18,10 @@ def get_model(model: str, **kwargs) -> LanguageModel:
                         **kwargs)
     elif "llama" in model.lower():
         return LlamaServer(model=MODEL_DICT[model]['model_name'], **kwargs)
+    elif "qwen" in model.lower():
+        return LlamaServer(model=MODEL_DICT[model]['model_name'],
+                           api_key=MODEL_DICT[model]['api_key'],
+                           base_url=MODEL_DICT[model]['base_url'],
+                           **kwargs)
     else:
         raise NotImplementedError(f"Model {model} not implemented")

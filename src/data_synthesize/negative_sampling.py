@@ -5,9 +5,11 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterator
 from tqdm.rich import tqdm_rich
+from tqdm import tqdm
 
 if True:
-    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    pro_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
     sys.path.append(pro_dir)
     os.chdir(pro_dir)
     print(f"project dir: {pro_dir}")
@@ -24,9 +26,10 @@ if True:
 
 
 def negative_sampling(retriever: Retriever, samples: list[dict]) -> Iterator[dict]:
-    for sample in tqdm_rich(samples, total=len(samples), desc="Negative Sampling..."):
+    for sample in tqdm(samples, total=len(samples), desc="Negative Sampling..."):
         if not all(
-            ["filtered_query" in sample["decomposed_questions"][sub_id] for sub_id in sample["decomposed_questions"]]
+            ["filtered_query" in sample["decomposed_questions"][sub_id]
+                for sub_id in sample["decomposed_questions"]]
         ):
             print(f"Invalid sample {sample['id']}")
             continue
@@ -63,7 +66,8 @@ def parse_args():
         required=True,
     )
     parser.add_argument("--split", type=str, default="demo")
-    parser.add_argument("--retriever", type=str, choices=ModelTypes.keys(), default="contriever")
+    parser.add_argument("--retriever", type=str,
+                        choices=ModelTypes.keys(), default="contriever")
     args = parser.parse_args()
     return args
 
@@ -72,11 +76,14 @@ def main(opts: argparse.Namespace):
     passage_path = os.path.join(CORPUS_DATA_PATH, opts.dataset, "corpus.jsonl")
 
     if opts.retriever == "e5-base-v2":
-        embedding_path = os.path.join(CORPUS_DATA_PATH, opts.dataset, "e5-base")
+        embedding_path = os.path.join(
+            CORPUS_DATA_PATH, opts.dataset, "e5-base")
     elif opts.retriever == "contriever":
-        embedding_path = os.path.join(CORPUS_DATA_PATH, opts.dataset, "contriever")
+        embedding_path = os.path.join(
+            CORPUS_DATA_PATH, opts.dataset, "contriever")
     else:
-        raise NotImplementedError(f"Retriever {opts.retriever} not implemented")
+        raise NotImplementedError(
+            f"Retriever {opts.retriever} not implemented")
 
     retriever = Retriever(
         passage_path=passage_path,
@@ -86,11 +93,15 @@ def main(opts: argparse.Namespace):
         model_path=ModelCheckpointMapping[opts.retriever],
     )
 
-    subq_data_path = os.path.join(SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH, opts.dataset, f"{opts.split}.jsonl")
+    subq_data_path = os.path.join(
+        SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH,
+        opts.dataset, f"{opts.split}.jsonl")
     logger.info(f"Loading data from: {subq_data_path}")
     samples = load_jsonl(subq_data_path)
 
-    save_path = os.path.join(SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH, opts.dataset, f"{opts.split}.jsonl")
+    save_path = os.path.join(
+        SYNTHESIZED_NEGATIVE_SAMPLING_DATA_PATH,
+        opts.dataset, f"{opts.split}.jsonl")
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     logger.info(f"Writing data to: {save_path}")
 

@@ -7,11 +7,12 @@ LLAMA_API_KEY = "USE YOUR OWN VLLM API KEY"
 
 
 class LlamaServer(LanguageModel):
-    def __init__(self, model: str = "Meta-Llama-3-70B-Instruct", *args, **kwargs):
-        super().__init__(model, *args, **kwargs)
+    def __init__(self, model: str = "Meta-Llama-3-70B-Instruct",
+                 api_key: str = None, base_url: str = None, *args, **kwargs):
+        super().__init__(model, *args, ** kwargs)
         self.client = OpenAI(
-            base_url=LLAMA_ENDPOINT,
-            api_key=LLAMA_API_KEY,
+            base_url=base_url,
+            api_key=api_key,
         )
 
     def chat(self, message: str, system_msg: str = None, json_mode: bool = False):
@@ -24,13 +25,15 @@ class LlamaServer(LanguageModel):
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
+            # response_format={"type": "json_object"}
         )
         response = response.choices[0].message.content
         return response
 
     def complete(self, prompts: str):
         response = self.client.completions.create(
-            model=self.model, prompt=prompts, echo=False, max_tokens=100
+            model=self.model, prompt=prompts, echo=False, max_tokens=100,
+            # response_format={"type": "json_object"}
         )
         response = response.choices[0].text
         return response

@@ -113,20 +113,29 @@ def ask_model_in_parallel(
 
 def get_type_parser(type: str) -> Callable:
     def json_parser(result: str):
-        return json.loads(result)
-        # pattern = r'\{.*\}'
-        # matches = re.findall(pattern, result, re.DOTALL)
+        # 情况1：字符串是纯JSON（直接以 { 开头）
+        if result.strip().startswith('{'):
+            return json.loads(result)
 
-        # if not matches:
-        #     logger.error(f"No valid JSON object found: {result}")
-        #     return None
+        # 情况2：字符串包含Markdown代码块（```json ... ```）
+        pattern = r'```json\n(.*?)\n```'  # 非贪婪匹配
+        match = re.search(pattern, result, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1).strip())
+            except json.JSONDecodeError:
+                pass  # 如果代码块内不是合法JSON，继续尝试其他情况
 
-        # try:
-        #     json_str = matches[0].strip()
-        #     return json.loads(json_str)
-        # except json.JSONDecodeError as e:
-        #     logger.error(f"JSON parsing failed, error message: {e}, original content: {result}")
-        #     return None
+        # 情况3：尝试匹配任意位置的 {...}（兜底方案）
+        match = re.search(r'\{.*?\}', result, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+        # 所有情况均失败
+        raise ValueError("无法从字符串中解析出合法JSON")
 
     def text_parser(result: str):
         return result

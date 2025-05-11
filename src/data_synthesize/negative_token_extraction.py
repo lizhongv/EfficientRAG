@@ -6,7 +6,7 @@ import json
 import os
 import sys
 import spacy
-from tqdm.rich import tqdm_rich
+from tqdm import tqdm
 
 if True:
     pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -146,6 +146,7 @@ def label_word(
 
 
 def main(opts: argparse.Namespace):
+    logger.info(f"Load data from: {opts.data_path}")
     data = load_jsonl(opts.data_path)
 
     infos = {
@@ -158,7 +159,7 @@ def main(opts: argparse.Namespace):
     }
 
     num_samples = 0
-    for sample in tqdm_rich(data):
+    for sample in tqdm(data):
         flag = True
         for sid, subq in sample["decomposed_questions"].items():
             if subq.get("negative_extracted_words", None) is None:

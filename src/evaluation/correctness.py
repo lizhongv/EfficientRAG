@@ -7,10 +7,19 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from tqdm.rich import tqdm_rich
+from tqdm import tqdm
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from language_models import LanguageModel, get_model
-from utils import ask_model, load_jsonl, write_jsonl
+if True:
+    import sys
+    pro_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(pro_dir)
+    os.chdir(pro_dir)
+    print(f"project dir: {pro_dir}")
+
+    from src.language_models import LanguageModel, get_model
+    from src.utils import ask_model, load_jsonl, write_jsonl
+    from src.log import logger
 
 LLM_EVAL_PROMPT = """
 You are an experienced linguist who is responsible for evaluating the correctness of the generated responses.
@@ -28,7 +37,7 @@ LLM_EXTRACT_ANSWER_PROMPT = """
 Given a question, you should simplify the response to a more concise form of answer. If the response is already in a concise form, you can response with the same answer. If the response does not contain the answer, you can return "noanswer".
 You should come out the simplified answer in JSON format with key "answer" and the answer string as the value. Your response should be in markdown code block. Like
 ```json
-{"answer": "simplified answer"}
+{{"answer": "simplified answer"}}
 ```
 
 Question: {question}
@@ -41,6 +50,7 @@ def parse_args():
     parser.add_argument("--fpath", type=str, required=True)
     parser.add_argument("--model", type=str, default="llama")
     parser.add_argument("--extract_answer", action="store_true")
+    parser.add_argument("--acc_evaluate", action="store_true")
     parser.add_argument("--workers", type=int, default=10)
     args = parser.parse_args()
     return args
@@ -109,8 +119,8 @@ def acc_evaluate(question: str, answer: str, prediction: str, model: LanguageMod
         model,
         prompt,
         mode="chat",
-        type="json",
-        check_if_valid=lambda resp: type(resp) is dict
+        response_type="json",
+        validator=lambda resp: type(resp) is dict
         and "response" in resp
         and resp["response"] in ["yes", "no"],
     )
@@ -120,13 +130,14 @@ def acc_evaluate(question: str, answer: str, prediction: str, model: LanguageMod
 
 
 def extract_answer(question: str, response: str, model: LanguageModel):
-    prompt = LLM_EXTRACT_ANSWER_PROMPT.format(question=question, response=response)
+    prompt = LLM_EXTRACT_ANSWER_PROMPT.format(
+        question=question, response=response)
     result = ask_model(
         model,
         prompt,
         mode="chat",
-        type="json",
-        check_if_valid=lambda resp: type(resp) is dict and "answer" in resp,
+        response_type="json",
+        validator=lambda resp: type(resp) is dict and "answer" in resp,
     )
     if result is None:
         return response
@@ -146,10 +157,13 @@ def evaluate_sample(sample, model: LanguageModel):
     origin_pred = prediction
     if opts.extract_answer:
         prediction = extract_answer(question, prediction, model)
+    acc = True
+    if opts.acc_evaluate:
+        acc = acc_evaluate(question, answer, prediction, model)
 
-    acc = acc_evaluate(question, answer, prediction, model)
     f1, precision, recall = f1_score(prediction, answer)
     em = exact_match(prediction, answer)
+
     return {
         "question": question,
         "answer": answer,
@@ -163,34 +177,42 @@ def evaluate_sample(sample, model: LanguageModel):
 
 def main(opts: argparse.Namespace):
     fpath = opts.fpath
+    logger.info(f"Load data from: {fpath}")
     data = load_jsonl(fpath)
     model = get_model(opts.model)
     base_path = os.path.splitext(fpath)[0]
     results = []
-    with ThreadPoolExecutor(max_workers=opts.workers) as executor:
-        tasks = {
-            executor.submit(evaluate_sample, sample, model): idx
-            for idx, sample in enumerate(data)
-        }
+    if opts.workers > 1:
+        with ThreadPoolExecutor(max_workers=opts.workers) as executor:
+            tasks = {
+                executor.submit(evaluate_sample, sample, model): idx
+                for idx, sample in enumerate(data)
+            }
 
-        for future in tqdm_rich(
-            as_completed(tasks), total=len(tasks), desc="Evaluating"
-        ):
-            try:
-                idx = tasks[future]
-                result = future.result()
-                results.append((result, idx))
-            except Exception as e:
-                print(f"Error processing sample {idx}: {e}")
-            finally:
-                pass
-
-    results = [result for result, _ in sorted(results, key=lambda x: x[1])]
+            for future in tqdm_rich(
+                as_completed(tasks), total=len(tasks), desc="Evaluating"
+            ):
+                try:
+                    idx = tasks[future]
+                    result = future.result()
+                    results.append((result, idx))
+                except Exception as e:
+                    print(f"Error processing sample {idx}: {e}")
+                finally:
+                    pass
+        results = [result for result, _ in sorted(results, key=lambda x: x[1])]
+    else:
+        results = [
+            evaluate_sample(sample, model)
+            for sample in tqdm(data, desc="Processing...")
+        ]
 
     output_path = f"{base_path}_correctness.jsonl"
+    
     write_jsonl(results, output_path)
 
-    accuracy_score = sum([result["correctness"] for result in results]) / len(results)
+    accuracy_score = sum([result["correctness"]
+                         for result in results]) / len(results)
     f1_score_avg = sum([result["f1"] for result in results]) / len(results)
     em_score_avg = sum([result["em"] for result in results]) / len(results)
     print(f"EM: {em_score_avg:.4f}")

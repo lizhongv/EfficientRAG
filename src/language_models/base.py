@@ -4,6 +4,7 @@ from typing import Union
 class LanguageModel:
     def __init__(self, model, *args, **kwargs):
         self.model = model
+        # self.self.client
 
     def chat(
         self,

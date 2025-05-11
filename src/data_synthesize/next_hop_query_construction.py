@@ -6,11 +6,11 @@ import sys
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from tqdm.rich import tqdm_rich
 from datetime import datetime
 
 if True:
-    pro_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    pro_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
     sys.path.append(pro_dir)
     os.chdir(pro_dir)
     print(f"project dir: {pro_dir}")
@@ -37,7 +37,8 @@ class NextQueryFilter:
         )
         logger.info(f"Load data from: {tagged_data_path}")
         self.tagged_data = load_jsonl(tagged_data_path)
-        self.check_if_valid = lambda x: all([k in x.keys() for k in ["filtered_query"]])
+        self.check_if_valid = lambda x: all(
+            [k in x.keys() for k in ["filtered_query"]])
 
     def parse(
         self,
@@ -50,7 +51,7 @@ class NextQueryFilter:
                 d["decomposed_questions"][sub_id].get("state", None) is None
                 for sub_id in d["decomposed_questions"].keys()
             )
-        ]
+        ]  # 过滤去失败样例
 
         current_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         temp_file_path = f"temp_next_hop_query_construction_{current_time}.json"
@@ -62,26 +63,29 @@ class NextQueryFilter:
                     executor.submit(self.parse_sample, sample, hierarchy): idx
                     for idx, sample in enumerate(labeled_data)
                 }
-                for future in tqdm_rich(as_completed(tasks), total=len(tasks), desc="Processing..."):
+                for future in tqdm(as_completed(tasks), total=len(tasks), desc="Processing..."):
                     task_id = tasks[future]
                     try:
                         result = future.result()
-                        # results.append((task_id, result))
-                        temp_f.write(json.dumps((result, task_id), indent=4, ensure_ascii=False) + "\n")
-                        temp_f.flush()
                     except Exception as e:
-                        print(f"Failed at sample {task_id}: {e}")
+                        # print(f"Failed at sample {task_id}: {e}")
+                        logger.error(f"Error processing sample {task_id}: {e}")
+                        continue
+                    temp_f.write(json.dumps((result, task_id),
+                                 ensure_ascii=False) + "\n")
+                    temp_f.flush()
                 temp_f.seek(0)
                 for line in temp_f:
                     try:
                         results.append(json.loads(line.strip()))
                     except json.JSONDecodeError as e:
-                        logger.error(f"Error decoding JSON from line: {line}. Error: {e}")
-            return [result[1] for result in sorted(results, key=lambda x: x[0])]
+                        logger.error(
+                            f"Error decoding JSON from line: {line}. Error: {e}")
+            return [result for result, idx in sorted(results, key=lambda x: x[1])]
         else:
             results = [
                 self.parse_sample(sample)
-                for sample in tqdm_rich(labeled_data, desc="Processing...")
+                for sample in tqdm(labeled_data, desc="Processing...")
             ]
             return results
 
@@ -115,8 +119,8 @@ class NextQueryFilter:
                     model,
                     prompt,
                     QUERY_LABEL_SYSTEM_PROMPT,
-                    type="json",
-                    check_if_valid=self.check_if_valid,
+                    response_type="json",
+                    validator=self.check_if_valid,
                 )
                 if result is None:
                     sample["decomposed_questions"][subq_id][
@@ -142,7 +146,7 @@ class NextQueryFilter:
 
     def parse_prompt(self, data: dict) -> list[dict]:
         prompt_list = []
-        cur_sub_question_ids = []
+        cur_sub_question_ids = []  # 遍历每个子问题
         for sub_question_id in sorted(data["decomposed_questions"].keys()):
             # identify which sub_question can generate filtered_question
             chunk = data["decomposed_questions"][sub_question_id]
@@ -150,7 +154,7 @@ class NextQueryFilter:
                 # remove chunk that already has filtered_question
                 continue
             dependency = chunk["dependency"].copy()
-            for dependent_id in dependency:
+            for dependent_id in dependency:  # 遍历每个依赖，不存在且不能依赖于自身
                 # remove duplicated and false question
                 if (
                     dependent_id not in data["decomposed_questions"].keys()
@@ -159,7 +163,8 @@ class NextQueryFilter:
                     dependency.remove(dependent_id)
             if not all(
                 [
-                    "filtered_query" in data["decomposed_questions"][dep_id].keys()
+                    "filtered_query" in data["decomposed_questions"][dep_id].keys(
+                    )
                     for dep_id in dependency
                 ]
             ):
@@ -272,12 +277,13 @@ def parse_args():
 
 def main(opt: argparse.Namespace):
     filter = NextQueryFilter(opt.model, opt.dataset, opt.split)
-    save_path = os.path.join(SYNTHESIZED_NEXT_QUERY_DATA_PATH, opt.dataset, f"{opt.split}.jsonl")
+    save_path = os.path.join(
+        SYNTHESIZED_NEXT_QUERY_DATA_PATH, opt.dataset, f"{opt.split}.jsonl")
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     logger.info(f"Save data to: {save_path}")
 
     with open(save_path, "w+", encoding="utf-8") as f:
-        for filtered_sample in tqdm_rich(filter.parse(workers=opt.workers), desc="Processing..."):
+        for filtered_sample in tqdm(filter.parse(workers=opt.workers), desc="Processing..."):
             info = json.dumps(filtered_sample, ensure_ascii=False)
             f.write(info + "\n")
 

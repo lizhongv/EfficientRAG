@@ -88,8 +88,8 @@ MODEL_DICT = {
     },
     "qwen2.5": {
         "model_name": "Qwen2.5-7B-Instruct",
-        "api_key": None,
-        "base_url": "/data1/Public/LLMs/Qwen2.5-7B-Instruct"  # 本地路径
+        "api_key": "sk-",
+        "base_url": "http://localhost:8000/v1"  # 本地路径
     },
     "deepseek": {
         "model_name": "deepseek-v3",

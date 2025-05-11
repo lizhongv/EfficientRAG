@@ -204,11 +204,12 @@ def efficient_rag(
                 for chunk in sample["decomposed_questions"].values()
             ],
         }
-        while iter < MAX_ITER:
+        while iter < MAX_ITER: # 迭代检索轮数
             next_query_info = []
-            chunks = retriever.search(query, top_k=top_k)[0]
+            chunks = retriever.search(query, top_k=top_k)[0] # 
             chunk_texts = [chunk["text"] for chunk in chunks]
-            infos, labels = label_info(labeler, tokenizer, nlp, query, chunk_texts)
+            infos, labels = label_info(
+                labeler, tokenizer, nlp, query, chunk_texts)
             sample_chunks[iter] = {
                 "query": query,
                 "filter_input": filter_input,
@@ -247,7 +248,8 @@ def main(opt: argparse.Namespace):
         .eval()
     )
     filter = (
-        DebertaV2ForTokenClassification.from_pretrained(opt.filter_ckpt, num_labels=2)
+        DebertaV2ForTokenClassification.from_pretrained(
+            opt.filter_ckpt, num_labels=2)
         .cuda()
         .eval()
     )
@@ -262,9 +264,9 @@ def main(opt: argparse.Namespace):
     )
     dataset = load_jsonl(
         os.path.join(
-            SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH, opt.dataset, "valid.jsonl"
+            SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH, opt.dataset, "train.jsonl"
             # SYNTHESIZED_NEXT_QUERY_EXTRACTED_DATA_PATH, opt.dataset, "demo.jsonl"
-        )
+        )  # "valid.jsonl"
     )
     if opt.test:
         dataset = dataset[:100]
@@ -272,6 +274,7 @@ def main(opt: argparse.Namespace):
     output_path = os.path.join(
         RETRIEVE_RESULT_PATH, "efficient_rag", f"{opt.dataset}-{opt.suffix}.jsonl"
     )
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     import time
     start = time.time()
     with open(output_path, "w+", encoding="utf-8") as f:
